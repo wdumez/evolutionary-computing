@@ -1,5 +1,6 @@
 import Reporter
 import numpy as np
+import random as rd
 
 
 # Modify the class name to match your student number.
@@ -7,6 +8,7 @@ class r0758170:
 
     def __init__(self):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
+        rd.seed(2023)  # During testing, set the seed for reproducible results.
 
     # The evolutionary algorithm's main loop
     def optimize(self, filename):
