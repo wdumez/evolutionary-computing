@@ -6,7 +6,7 @@ import random as rd
 def swap_mutate(candidate):
     """Mutate a candidate solution in place."""
     if candidate.size <= 1:
-        return candidate
+        return
     first_pos = rd.randint(0, candidate.size - 2)
     second_pos = rd.randint(first_pos, candidate.size - 1)
     candidate[first_pos:second_pos + 1] = np.flip(candidate[first_pos:second_pos + 1])
