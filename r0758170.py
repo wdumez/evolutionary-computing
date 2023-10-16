@@ -1,6 +1,6 @@
-import Reporter
-import numpy as np
 import random as rd
+import numpy as np
+import Reporter
 
 
 def mutate_inversion(candidate):
@@ -15,6 +15,11 @@ def mutate_inversion(candidate):
 def recombine_PMX(parent1, parent2):
     """Use two parent candidates to produce offspring using partially mapped crossover."""
     raise NotImplementedError
+
+
+def index_of(array, value):
+    """Return the first index at which value occurs in array."""
+    return np.where(array, value)[0][0]
 
 
 # Modify the class name to match your student number.
