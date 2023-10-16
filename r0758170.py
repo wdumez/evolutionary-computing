@@ -46,9 +46,7 @@ def recombine_PMX(parent1, parent2):
 
 def index_of(array, value):
     """Return the first index at which value occurs in array."""
-    tmp = np.where(array == value)
-    return tmp[0][0]
-    # return np.where(array == value)[0][0]
+    return np.where(array == value)[0][0]
 
 
 # Modify the class name to match your student number.
