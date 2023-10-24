@@ -147,18 +147,30 @@ def avoid_inf(distance_matrix, population_size):
     """Initializes the population using a heuristic which tries to avoid infinite values."""
     population = []
     for i in range(population_size):
-        start = rd.randrange(0, len(distance_matrix))
-        candidate = [start]
-        for j in range(len(distance_matrix)-1):
+        choices = list(range(population_size))
+        candidate = []
+        while len(choices) != 0:
+            if len(candidate) == 0:
+                choice = rd.choice(choices)
+                candidate.append(choice)
+                choices.remove(choice)
+                continue
             possible_next = [
-                x for x in range(len(distance_matrix))
+                x for x in choices
                 if x not in candidate and distance_matrix[candidate[-1]][x] != math.inf
             ]
-            if len(possible_next) == 0:  # If there is no next city without inf distance, pick random.
-                # TODO Modify the previous value / pick different start when this happens.
-                possible_next = [x for x in range(len(distance_matrix)) if x not in candidate]
-            next_city = rd.choice(possible_next)
-            candidate.append(next_city)
+            if len(possible_next) == 0:
+                # This leads to a dead end, backtrack the last choice and try again.
+                choices.append(candidate[-1])
+                candidate.remove(candidate[-1])
+            else:
+                # The path can be extended, pick a next choice with preference for better distances.
+                if rd.random() < 0.15:
+                    choice = min(possible_next, key=lambda x: distance_matrix[candidate[-1]][x])
+                else:
+                    choice = rd.choice(possible_next)
+                candidate.append(choice)
+                choices.remove(choice)
         population.append(np.array(candidate))
     return population
 
@@ -181,9 +193,9 @@ class r0758170:
         self.population = []
         self.population_size = 100
         self.mu = 20  # Must be even.
-        self.mutate_chance = 0.05
+        self.mutate_chance = 0.001
         self.mutation_function = mutate_inversion
-        self.recombine_function = recombine_PMX
+        self.recombine_function = recombine_edge_crossover
         self.fitness_function = length
         self.init_function = avoid_inf
         self.selection = k_tournament
@@ -196,11 +208,12 @@ class r0758170:
         file.close()
 
         # Initialization
+        print('Initializing...')
         self.population = self.init_function(distanceMatrix, self.population_size)
-        # print(f'Initial pop: \n{[self.fitness_function(x, distanceMatrix) for x in self.population]}')
+        print('Finished initializing.')
 
         # maxIt = 500
-        # current_it = 0
+        current_it = 1
         # while current_it < maxIt:
         while True:
             # Selection
@@ -251,10 +264,12 @@ class r0758170:
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            timeLeft = self.reporter.report(meanObjective, bestObjective, bestSolution)
+            print(f'{current_it:5} | mean: {meanObjective:.2f} | best:{bestObjective:.2f}')
+            # timeLeft = self.reporter.report(meanObjective, bestObjective, bestSolution)
+            timeLeft = 1
             if timeLeft < 0:
                 break
-            # current_it += 1
+            current_it += 1
 
         # Your code here.
         return 0
