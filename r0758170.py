@@ -1,21 +1,73 @@
 import random as rd
+import math
 import numpy as np
 import Reporter
-import math
+from time import time
+
+SEED = 2023
+rd.seed(SEED)
+np.random.seed(SEED)
 
 
 def mutate_inversion(candidate):
     """Mutate a candidate solution in place using inversion mutation."""
     size = candidate.size
-    if size <= 1:
-        return
     first_pos = rd.randint(0, size - 2)
     second_pos = rd.randint(first_pos, size - 1)
     candidate[first_pos:second_pos + 1] = np.flip(candidate[first_pos:second_pos + 1])
 
 
+def mutate_swap(candidate):
+    """Mutate a candidate solution in place using swap mutation."""
+    size = candidate.size
+    first_pos = rd.randint(0, size - 1)
+    second_pos = first_pos
+    while second_pos == first_pos:
+        second_pos = rd.randint(0, size - 1)
+    tmp = candidate[first_pos]
+    candidate[first_pos] = candidate[second_pos]
+    candidate[second_pos] = tmp
+
+
+def recombine_cycle_crossover(parent1, parent2):
+    """Use two parent candidates to produce two offspring using cycle crossover."""
+    cycles = find_cycles(parent1, parent2)
+    offspring1 = np.zeros_like(parent1)
+    offspring2 = np.zeros_like(parent2)
+    for i, cycle in enumerate(cycles):
+        if i % 2 == 0:
+            for idx in cycle:
+                offspring1[idx] = parent1[idx]
+                offspring2[idx] = parent2[idx]
+        else:
+            for idx in cycle:
+                offspring1[idx] = parent2[idx]
+                offspring2[idx] = parent1[idx]
+    return [offspring1, offspring2]
+
+
+def find_cycles(parent1, parent2):
+    """Returns all cycles of parent1 and parent2 as a list of lists of indices."""
+    unused_idx = list(range(len(parent1)))
+    cycles = []
+    while len(unused_idx) != 0:
+        start_idx = unused_idx[0]
+        current_idx: int = start_idx
+        unused_idx.remove(current_idx)
+        cycle = [current_idx]
+        while True:
+            allele_p2 = parent2[current_idx]
+            current_idx = index_of(parent1, allele_p2)
+            if current_idx == start_idx:
+                break
+            unused_idx.remove(current_idx)
+            cycle.append(current_idx)
+        cycles.append(cycle)
+    return cycles
+
+
 def recombine_edge_crossover(parent1, parent2):
-    """Use two parent candidates to produce offspring using edge crossover."""
+    """Use two parent candidates to produce one offspring using edge crossover."""
     # 1. Construct the adjacency table.
     adj_table = create_adj_table(parent1, parent2)
     choices = [x for x in parent1]
@@ -59,7 +111,7 @@ def recombine_edge_crossover(parent1, parent2):
             else:
                 next_element = rd.choice(options)
         current_element = next_element
-    return np.array(partial_result)
+    return [np.array(partial_result)]
 
 
 def create_adj_table(candidate1, candidate2):
@@ -82,15 +134,13 @@ def create_adj_table(candidate1, candidate2):
 def get_adj(x, candidate):
     """Returns the adjacent values of x in candidate as a list."""
     x_idx = index_of(candidate, x)
-    prev_idx = x_idx-1
-    next_idx = x_idx+1 if x_idx < candidate.size-1 else 0
+    prev_idx = x_idx - 1
+    next_idx = x_idx + 1 if x_idx < candidate.size - 1 else 0
     return [candidate[prev_idx], candidate[next_idx]]
 
 
 def recombine_PMX(parent1, parent2):
-    """Use two parent candidates to produce one offspring using partially mapped crossover.
-    See p.70-71 in Eiben & Smith.
-    """
+    """Use two parent candidates to produce one offspring using partially mapped crossover."""
     size = parent1.size
     offspring = np.zeros_like(parent1)
     # We must initialize offspring with -1's, to identify whether a spot is not yet filled.
@@ -115,21 +165,33 @@ def recombine_PMX(parent1, parent2):
     for i in range(size):
         if offspring[i] == -1:
             offspring[i] = parent2[i]
-    return offspring
+    return [offspring]
+
+
+def recombine_order_crossover(parent1, parent2):
+    """Use two parent candidates to produce one offspring using order crossover."""
+    size = parent1.size
+    offspring = np.zeros_like(parent1)
+
+    first_pos = rd.randint(0, size - 2)
+    second_pos = rd.randint(first_pos, size - 1)
+    offspring[first_pos:second_pos + 1] = parent1[first_pos:second_pos + 1]
+
+    raise NotImplemented
 
 
 def index_of(array, value):
     """Return the first index at which value occurs in array."""
-    return np.where(array == value)[0][0]
+    return int(np.where(array == value)[0][0])
 
 
 def length(candidate, distance_matrix):
     """Calculate the length of the path of candidate."""
     result = 0.0
     size = candidate.size
-    for i in range(size-1):
-        result += distance_matrix[candidate[i]][candidate[i+1]]
-    result += distance_matrix[candidate[size-1]][candidate[0]]  # Order matters.
+    for i in range(size - 1):
+        result += distance_matrix[candidate[i]][candidate[i + 1]]
+    result += distance_matrix[candidate[size - 1]][candidate[0]]  # Order matters.
     return result
 
 
@@ -188,12 +250,11 @@ class r0758170:
 
     def __init__(self):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
-        # rd.seed(2023)  # During testing, set the seed for reproducible results.
         self.k = 5
         self.population = []
         self.population_size = 100
-        self.mu = 20  # Must be even.
-        self.mutate_chance = 0.001
+        self.mu = 40  # Must be even.
+        self.mutate_chance = 0.05
         self.mutation_function = mutate_inversion
         self.recombine_function = recombine_edge_crossover
         self.fitness_function = length
@@ -202,6 +263,7 @@ class r0758170:
 
     # The evolutionary algorithm's main loop
     def optimize(self, filename):
+        start_time = time()
         # Read distance matrix from file.
         file = open(filename)
         distanceMatrix = np.loadtxt(file, delimiter=",")
@@ -212,9 +274,8 @@ class r0758170:
         self.population = self.init_function(distanceMatrix, self.population_size)
         print('Finished initializing.')
 
-        # maxIt = 500
+        max_it = 500
         current_it = 1
-        # while current_it < maxIt:
         while True:
             # Selection
             # Perform a certain number of k-tournaments; this depends on self.mu
@@ -222,17 +283,17 @@ class r0758170:
             # One offspring: need 2 * self.mu selected.
             # Two offspring: need self.mu selected.
             selected = []
-            for i in range(2*self.mu):
+            for i in range(2 * self.mu):
                 selected.append(k_tournament(self.population, self.k, self.fitness_function, distanceMatrix))
 
             # Variation
-            # Recombination will produce self.mu new offspring.
+            # Recombination will produce new offspring using the selected candidates.
             new_offspring = []
             it = iter(selected)
             for p1 in it:
                 p2 = next(it)
                 offspring = self.recombine_function(p1, p2)
-                new_offspring.append(offspring)
+                new_offspring.extend(offspring)
             self.population.extend(new_offspring)
 
             # Mutation will happend on the entire population and new offspring, with a certain probability.
@@ -264,10 +325,11 @@ class r0758170:
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            print(f'{current_it:5} | mean: {meanObjective:.2f} | best:{bestObjective:.2f}')
+            print(f'{time()-start_time:3.0f}s | {current_it:5} | mean: {meanObjective:.2f} | best:{bestObjective:.2f}')
             # timeLeft = self.reporter.report(meanObjective, bestObjective, bestSolution)
-            timeLeft = 1
-            if timeLeft < 0:
+            # if timeLeft < 0:
+            #     break
+            if current_it > max_it:
                 break
             current_it += 1
 
