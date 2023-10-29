@@ -4,29 +4,38 @@ import numpy as np
 import Reporter
 from time import time
 
-SEED = 2023
-rd.seed(SEED)
-np.random.seed(SEED)
+
+# SEED = 2
+# rd.seed(SEED)
+# np.random.seed(SEED)
 
 
 def mutate_inversion(candidate):
     """Mutate a candidate solution in place using inversion mutation."""
     size = candidate.size
-    first_pos = rd.randint(0, size - 2)
-    second_pos = rd.randint(first_pos, size - 1)
+    first_pos = rd.randrange(0, size - 1)
+    second_pos = rd.randrange(first_pos, size)
     candidate[first_pos:second_pos + 1] = np.flip(candidate[first_pos:second_pos + 1])
 
 
 def mutate_swap(candidate):
     """Mutate a candidate solution in place using swap mutation."""
     size = candidate.size
-    first_pos = rd.randint(0, size - 1)
+    first_pos = rd.randrange(0, size)
     second_pos = first_pos
     while second_pos == first_pos:
-        second_pos = rd.randint(0, size - 1)
+        second_pos = rd.randrange(0, size)
     tmp = candidate[first_pos]
     candidate[first_pos] = candidate[second_pos]
     candidate[second_pos] = tmp
+
+
+def mutate_scramble(candidate):
+    """Mutate a candidate solution in place using scramble mutation."""
+    size = candidate.size
+    first_pos = rd.randrange(0, size - 1)
+    second_pos = rd.randrange(first_pos, size)
+    np.random.shuffle(candidate[first_pos:second_pos + 1])
 
 
 def recombine_cycle_crossover(parent1, parent2):
@@ -68,50 +77,66 @@ def find_cycles(parent1, parent2):
 
 def recombine_edge_crossover(parent1, parent2):
     """Use two parent candidates to produce one offspring using edge crossover."""
-    # 1. Construct the adjacency table.
     adj_table = create_adj_table(parent1, parent2)
-    choices = [x for x in parent1]
-    partial_result = []
-    # 2 & 3. Pick an initial element at random and put it in the offspring.
-    #        Set the variable current_element = entry.
-    current_element = rd.choice(choices)
-    while len(choices) != 0:
-        choices.remove(current_element)
-        partial_result.append(current_element)
-        # 4. Remove all references to current_element from the table.
-        for x, adj_list in adj_table.items():
-            for y, is_common in adj_list:
-                if current_element == y:
-                    adj_list.remove((y, is_common))
-        # 5. Examine list for current element.
-        current_element_adj_list = adj_table[current_element]
-        # If there is a common edge, pick that to be the next element.
-        next_element = None
-        for x, is_common in current_element_adj_list:
-            if is_common:
-                next_element = x
+    remaining = [x for x in parent1]
+    current_element = rd.choice(remaining)
+    result = [current_element]
+    remaining.remove(current_element)
+    remove_references(adj_table, current_element)
+    while len(remaining) != 0:
+        try:
+            current_element = pick_next_element(adj_table, current_element)
+            result.append(current_element)
+            remaining.remove(current_element)
+            remove_references(adj_table, current_element)
+        except NoNextElementException:
+            try:
+                next_element = pick_next_element(adj_table, result[0])
+                result.insert(0, next_element)
+                remaining.remove(next_element)
+                remove_references(adj_table, next_element)
+            except NoNextElementException:
+                current_element = rd.choice(remaining)
+                result.append(current_element)
+                remaining.remove(current_element)
+                remove_references(adj_table, current_element)
+    return [np.array(result)]
+
+
+class NoNextElementException(Exception):
+    pass
+
+
+def pick_next_element(adj_table, current_element):
+    """Returns the next element to extend the result with.
+    Raises NoNextElementException if there is no next element to extend with.
+    """
+    lst = adj_table[current_element]
+    if len(lst) == 0:
+        raise NoNextElementException
+    for x, is_common in lst:
+        if is_common:
+            return x
+    next_element_options = []
+    shortest_len = math.inf
+    for x, is_common in lst:
+        x_lst_len = len(adj_table[x])
+        if x_lst_len < shortest_len:
+            next_element_options = [x]
+            shortest_len = x_lst_len
+        elif x_lst_len == shortest_len:
+            next_element_options.append(x)
+    next_element = rd.choice(next_element_options)
+    return next_element
+
+
+def remove_references(adj_table, value):
+    """Removes all references of value in the lists of adj_table."""
+    for x, lst in adj_table.items():
+        for y, is_common in lst:
+            if value == y:
+                lst.remove((y, is_common))
                 break
-        if not next_element:
-            # Otherwise pick the entry in the list which itself has the shortest list.
-            options = []
-            shortest_length = math.inf
-            for x, adj_list in adj_table.items():
-                if x not in [y for y, _ in current_element_adj_list]:
-                    continue
-                if len(adj_list) <= shortest_length:
-                    shortest_length = len(adj_list)
-                    options.append(x)
-            # 6. In the case of an empty list, the other end of the offspring is examined for extension;
-            # otherwise a new element is chosen at random.
-            if len(options) == 0:
-                # TODO I don't know what that means? Just picking at random for now.
-                if len(choices) == 0:
-                    break
-                next_element = rd.choice(choices)
-            else:
-                next_element = rd.choice(options)
-        current_element = next_element
-    return [np.array(partial_result)]
 
 
 def create_adj_table(candidate1, candidate2):
@@ -253,9 +278,9 @@ class r0758170:
         self.k = 5
         self.population = []
         self.population_size = 100
-        self.mu = 40  # Must be even.
+        self.mu = 100  # Must be even.
         self.mutate_chance = 0.05
-        self.mutation_function = mutate_inversion
+        self.mutation_function = mutate_scramble
         self.recombine_function = recombine_edge_crossover
         self.fitness_function = length
         self.init_function = avoid_inf
@@ -270,12 +295,12 @@ class r0758170:
         file.close()
 
         # Initialization
-        print('Initializing...')
         self.population = self.init_function(distanceMatrix, self.population_size)
-        print('Finished initializing.')
 
-        max_it = 500
-        current_it = 1
+        # max_it = 2000
+        # current_it = 1
+        best_solution = self.population[0]
+        best_objective = self.fitness_function(best_solution, distanceMatrix)
         while True:
             # Selection
             # Perform a certain number of k-tournaments; this depends on self.mu
@@ -302,36 +327,40 @@ class r0758170:
                     self.mutation_function(candidate)
 
             # Elimination
-            # Lambda + mu elimination: keep only the lambda best candidates.
+            # Lambda + mu elimination: keep only the best candidates.
             self.population.sort(key=lambda x: self.fitness_function(x, distanceMatrix))
             self.population = self.population[:self.population_size]
 
             # print(f'New pop: \n{[self.fitness_function(x, distanceMatrix) for x in self.population]}')
 
             # Recalculate mean and best.
-            meanObjective = 0.0
-            bestObjective = math.inf
-            bestSolution = self.population[0]
+            mean_objective = 0.0
+            current_best_solution = self.population[0]
+            current_best_objective = self.fitness_function(current_best_solution, distanceMatrix)
             for candidate in self.population:
                 candidate_fitness = self.fitness_function(candidate, distanceMatrix)
-                meanObjective += candidate_fitness
-                if candidate_fitness < bestObjective:
-                    bestObjective = candidate_fitness
-                    bestSolution = candidate
-            meanObjective = meanObjective / self.population_size
+                mean_objective += candidate_fitness
+                if candidate_fitness < current_best_objective:
+                    current_best_objective = candidate_fitness
+                    current_best_solution = candidate
+            mean_objective = mean_objective / self.population_size
+            if current_best_objective < best_objective:
+                best_objective = current_best_objective
+                best_solution = current_best_solution
 
             # Call the reporter with:
             #  - the mean objective function value of the population
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            print(f'{time()-start_time:3.0f}s | {current_it:5} | mean: {meanObjective:.2f} | best:{bestObjective:.2f}')
-            # timeLeft = self.reporter.report(meanObjective, bestObjective, bestSolution)
-            # if timeLeft < 0:
-            #     break
-            if current_it > max_it:
+            current_time = time() - start_time
+            # print(f'{current_time:3.0f}s | {current_it:5} | mean: {mean_objective:.2f} | best:{best_objective:.2f}')
+            timeLeft = self.reporter.report(mean_objective, best_objective, best_solution)
+            if timeLeft < 0:
                 break
-            current_it += 1
+            # if current_it > max_it:
+            #     break
+            # current_it += 1
 
         # Your code here.
         return 0
