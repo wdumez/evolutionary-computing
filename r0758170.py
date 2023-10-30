@@ -54,9 +54,9 @@ def length(candidate, distance_matrix):
     """Calculate the length of the path of candidate."""
     result = 0.0
     size = candidate.size
-    for i in range(size-1):
-        result += distance_matrix[candidate[i]][candidate[i+1]]
-    result += distance_matrix[candidate[size-1]][candidate[0]]  # Order matters.
+    for i in range(size - 1):
+        result += distance_matrix[candidate[i]][candidate[i + 1]]
+    result += distance_matrix[candidate[size - 1]][candidate[0]]  # Order matters.
     return result
 
 
@@ -76,7 +76,7 @@ def avoid_inf(distance_matrix, population_size):
     for i in range(population_size):
         start = rd.randrange(0, len(distance_matrix))
         candidate = [start]
-        for j in range(len(distance_matrix)-1):
+        for j in range(len(distance_matrix) - 1):
             possible_next = [
                 x for x in range(len(distance_matrix))
                 if x not in candidate and distance_matrix[candidate[-1]][x] != math.inf
@@ -129,6 +129,8 @@ class r0758170:
         # maxIt = 500
         # current_it = 0
         # while current_it < maxIt:
+        bestObjective = math.inf
+        bestSolution = self.population[0]
         while True:
             # Selection
             # Perform a certain number of k-tournaments; this depends on self.mu
@@ -136,7 +138,7 @@ class r0758170:
             # One offspring: need 2 * self.mu selected.
             # Two offspring: need self.mu selected.
             selected = []
-            for i in range(2*self.mu):
+            for i in range(2 * self.mu):
                 selected.append(k_tournament(self.population, self.k, self.fitness_function, distanceMatrix))
 
             # Variation
@@ -163,15 +165,18 @@ class r0758170:
 
             # Recalculate mean and best.
             meanObjective = 0.0
-            bestObjective = math.inf
-            bestSolution = self.population[0]
+            currentBestObjective = math.inf
+            currentBestSolution = self.population[0]
             for candidate in self.population:
                 candidate_fitness = self.fitness_function(candidate, distanceMatrix)
                 meanObjective += candidate_fitness
-                if candidate_fitness < bestObjective:
-                    bestObjective = candidate_fitness
-                    bestSolution = candidate
+                if candidate_fitness < currentBestObjective:
+                    currentBestObjective = candidate_fitness
+                    currentBestSolution = candidate
             meanObjective = meanObjective / self.population_size
+            if currentBestObjective < bestObjective:
+                bestObjective = currentBestObjective
+                bestSolution = currentBestSolution
 
             # Call the reporter with:
             #  - the mean objective function value of the population
