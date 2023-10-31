@@ -277,7 +277,7 @@ def k_tournament(population, k, fitness_function, distance_matrix):
     selected = []
     for i in range(k):
         selected.append(rd.choice(population))
-    return max(selected, key=lambda x: fitness_function(x, distance_matrix))
+    return min(selected, key=lambda x: fitness_function(x, distance_matrix))
 
 
 # Modify the class name to match your student number.
