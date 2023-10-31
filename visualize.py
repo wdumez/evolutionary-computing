@@ -1,7 +1,8 @@
-import seaborn as sns
-import pandas as pd
-import matplotlib.pyplot as plt
 from io import StringIO
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 
 
 def preprocess(filename):
@@ -19,7 +20,7 @@ def preprocess(filename):
                        skiprows=1, header=0, skipinitialspace=True)
 
 
-df = preprocess('./r0758170.csv')
+df = preprocess('./group phase tour50 results/lambda 100 mu 20 mp 005 k 5.csv')
 df = pd.melt(df, ['Elapsed time'], var_name='Objective', value_name='Fitness')
 g = sns.lineplot(df, x='Elapsed time', y='Fitness', hue='Objective')
 g.set_title('TSP')
