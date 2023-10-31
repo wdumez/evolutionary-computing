@@ -1,8 +1,10 @@
 import random as rd
+from time import time
+
 import math
 import numpy as np
+
 import Reporter
-from time import time
 
 
 # SEED = 2
@@ -11,7 +13,7 @@ from time import time
 
 
 def mutate_inversion(candidate):
-    """Mutate a candidate solution in place using inversion mutation."""
+    """Mutate a candidate solution in-place using inversion mutation."""
     size = candidate.size
     first_pos = rd.randrange(0, size - 1)
     second_pos = rd.randrange(first_pos, size)
@@ -19,7 +21,7 @@ def mutate_inversion(candidate):
 
 
 def mutate_swap(candidate):
-    """Mutate a candidate solution in place using swap mutation."""
+    """Mutate a candidate solution in-place using swap mutation."""
     size = candidate.size
     first_pos = rd.randrange(0, size)
     second_pos = first_pos
@@ -31,11 +33,16 @@ def mutate_swap(candidate):
 
 
 def mutate_scramble(candidate):
-    """Mutate a candidate solution in place using scramble mutation."""
+    """Mutate a candidate solution in-place using scramble mutation."""
     size = candidate.size
     first_pos = rd.randrange(0, size - 1)
     second_pos = rd.randrange(first_pos, size)
     np.random.shuffle(candidate[first_pos:second_pos + 1])
+
+
+def mutate_insert(candidate):
+    """Mutate a candidate in-place using insert mutation."""
+    raise NotImplementedError
 
 
 def recombine_cycle_crossover(parent1, parent2):
@@ -104,11 +111,11 @@ def recombine_edge_crossover(parent1, parent2):
 
 
 class NoNextElementException(Exception):
-    pass
+    """Exception used in edge crossover recombination."""
 
 
 def pick_next_element(adj_table, current_element):
-    """Returns the next element to extend the result with.
+    """Returns the next element to extend the offspring with.
     Raises NoNextElementException if there is no next element to extend with.
     """
     lst = adj_table[current_element]
@@ -133,6 +140,8 @@ def pick_next_element(adj_table, current_element):
 def remove_references(adj_table, value):
     """Removes all references of value in the lists of adj_table."""
     for x, lst in adj_table.items():
+        if x == value:
+            continue  # We can skip this case because value cannot be adjacent to itself.
         for y, is_common in lst:
             if value == y:
                 lst.remove((y, is_common))
@@ -166,16 +175,15 @@ def get_adj(x, candidate):
 
 def recombine_PMX(parent1, parent2):
     """Use two parent candidates to produce one offspring using partially mapped crossover."""
+    # TODO Refactor this to produce two offspring.
     size = parent1.size
     offspring = np.zeros_like(parent1)
     # We must initialize offspring with -1's, to identify whether a spot is not yet filled.
     for i in range(size):
         offspring[i] = -1
-    # 1.
     first_pos = rd.randint(0, size - 2)
     second_pos = rd.randint(first_pos, size - 1)
     offspring[first_pos:second_pos + 1] = parent1[first_pos:second_pos + 1]
-    # 2. -  5.
     for elem in parent2[first_pos:second_pos + 1]:
         if elem in parent1[first_pos:second_pos + 1]:
             continue  # elem already occurs in offspring
@@ -186,7 +194,6 @@ def recombine_PMX(parent1, parent2):
             index = index_of(parent2, value)
             value = offspring[index]
         offspring[index] = elem
-    # 6.
     for i in range(size):
         if offspring[i] == -1:
             offspring[i] = parent2[i]
@@ -206,7 +213,9 @@ def recombine_order_crossover(parent1, parent2):
 
 
 def index_of(array, value):
-    """Return the first index at which value occurs in array."""
+    """Return the first index at which value occurs in array.
+    This is just a convenience function for numpy arrays, which behaves like list.index(value).
+    """
     return int(np.where(array == value)[0][0])
 
 
@@ -215,29 +224,30 @@ def length(candidate, distance_matrix):
     result = 0.0
     size = candidate.size
     for i in range(size - 1):
+        # Order is important for the distance matrix.
         result += distance_matrix[candidate[i]][candidate[i + 1]]
-    result += distance_matrix[candidate[size - 1]][candidate[0]]  # Order matters.
+    result += distance_matrix[candidate[size - 1]][candidate[0]]
     return result
 
 
-def monte_carlo(distance_matrix, population_size):
+def init_monte_carlo(distance_matrix, population_size):
     """Initializes the population at random."""
     population = []
     for i in range(population_size):
-        gene = np.array(list(range(len(distance_matrix))))
-        np.random.shuffle(gene)
-        population.append(gene)
+        candidate = np.array(list(range(len(distance_matrix))))
+        np.random.shuffle(candidate)
+        population.append(candidate)
     return population
 
 
-def avoid_inf(distance_matrix, population_size):
-    """Initializes the population using a heuristic which tries to avoid infinite values."""
+def init_avoid_inf_heuristic(distance_matrix, population_size):
+    """Initializes the population using a heuristic which avoids infinite values."""
     population = []
     for i in range(population_size):
         choices = list(range(population_size))
         candidate = []
         while len(choices) != 0:
-            if len(candidate) == 0:
+            if len(candidate) == 0:  # The first element is picked at random.
                 choice = rd.choice(choices)
                 candidate.append(choice)
                 choices.remove(choice)
@@ -251,7 +261,7 @@ def avoid_inf(distance_matrix, population_size):
                 choices.append(candidate[-1])
                 candidate.remove(candidate[-1])
             else:
-                # The path can be extended, pick a next choice with preference for better distances.
+                # The path can be extended, pick a next element with preference for the greedy choice.
                 if rd.random() < 0.15:
                     choice = min(possible_next, key=lambda x: distance_matrix[candidate[-1]][x])
                 else:
@@ -283,7 +293,7 @@ class r0758170:
         self.mutation_function = mutate_scramble
         self.recombine_function = recombine_edge_crossover
         self.fitness_function = length
-        self.init_function = avoid_inf
+        self.init_function = init_avoid_inf_heuristic
         self.selection = k_tournament
 
     # The evolutionary algorithm's main loop
