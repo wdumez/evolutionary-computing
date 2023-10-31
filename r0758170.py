@@ -17,6 +17,8 @@ def mutate_inversion(candidate):
 def recombine_PMX(parent1, parent2):
     """Use two parent candidates to produce one offspring using partially mapped crossover.
     See p.70-71 in Eiben & Smith.
+    Note: this operator can technically produce two offspring, but we forgot about
+    this during our implementation.
     """
     size = parent1.size
     offspring = np.zeros_like(parent1)
