@@ -15,16 +15,18 @@ class Candidate:
     def __init__(self, array):
         self.array = array
 
-    def __str__(self):
+    def __repr__(self):
         return str(self.array)
 
+    def __len__(self):
+        return len(self.array)
 
-def mutate_inversion(candidate):
-    """Mutate a candidate solution in-place using inversion mutation."""
-    size = candidate.size
-    first_pos = rd.randrange(0, size - 1)
-    second_pos = rd.randrange(first_pos, size)
-    candidate[first_pos:second_pos + 1] = np.flip(candidate[first_pos:second_pos + 1])
+    def mutate_inversion(self):
+        """Mutate a candidate solution in-place using inversion mutation."""
+        size = len(self)
+        first_pos = rd.randrange(0, size - 1)
+        second_pos = rd.randrange(first_pos, size)
+        self.array[first_pos:second_pos + 1] = np.flip(self.array[first_pos:second_pos + 1])
 
 
 def mutate_swap(candidate):
