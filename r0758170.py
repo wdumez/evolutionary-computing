@@ -189,29 +189,31 @@ def get_adj(x: int, candidate: Candidate) -> list[int]:
 
 def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
     """Use two parent candidates to produce one offspring using partially mapped crossover."""
-    # TODO Refactor this to produce two offspring.
     size = len(parent1)
-    offspring = np.zeros_like(parent1)
-    # We must initialize offspring with -1's, to identify whether a spot is not yet filled.
-    for i in range(size):
-        offspring[i] = -1
+    all_offspring = []
     first_pos = rd.randint(0, size - 2)
     second_pos = rd.randint(first_pos, size - 1)
-    offspring[first_pos:second_pos + 1] = parent1[first_pos:second_pos + 1]
-    for elem in parent2[first_pos:second_pos + 1]:
-        if elem in parent1[first_pos:second_pos + 1]:
-            continue  # elem already occurs in offspring
-        # elem is not yet in offspring, find the index to place it
-        index = 0
-        value = elem
-        while value != -1:
-            index = index_of(parent2, value)
-            value = offspring[index]
-        offspring[index] = elem
-    for i in range(size):
-        if offspring[i] == -1:
-            offspring[i] = parent2[i]
-    return [offspring]
+    for p1, p2 in [(parent1, parent2), (parent2, parent1)]:
+        offspring = np.zeros_like(p1)
+        # We must initialize offspring with -1's, to identify whether a spot is not yet filled.
+        for i in range(size):
+            offspring[i] = -1
+        offspring[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
+        for elem in p2[first_pos:second_pos + 1]:
+            if elem in p1[first_pos:second_pos + 1]:
+                continue  # elem already occurs in offspring
+            # elem is not yet in offspring, find the index to place it
+            index = 0
+            value = elem
+            while value != -1:
+                index = index_of(p2, value)
+                value = offspring[index]
+            offspring[index] = elem
+        for i in range(size):
+            if offspring[i] == -1:
+                offspring[i] = p2[i]
+        all_offspring.append(offspring)
+    return all_offspring
 
 
 def recombine_order_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
@@ -288,9 +290,9 @@ class r0758170:
         self.population = []
         self.population_size = 100
         self.nr_offspring = 100  # Must be even.
-        self.mutate_chance = 0.25
-        self.mutation_function = mutate_inversion
-        self.recombine_function = recombine_cycle_crossover
+        self.mutate_chance = 0.05
+        self.mutation_function = mutate_swap
+        self.recombine_function = recombine_PMX
         self.fitness_function = fitness_length
         self.init_function = init_avoid_inf_heuristic
         self.selection = select_k_tournament
