@@ -15,6 +15,7 @@ class Candidate:
 
     def __init__(self, array):
         self.array = array
+        self._index = -1
 
     def __repr__(self) -> str:
         return str(self.array)
@@ -22,12 +23,28 @@ class Candidate:
     def __len__(self) -> int:
         return len(self.array)
 
+    def __iter__(self):
+        self._index = -1
+        return self
+
+    def __next__(self):
+        if self._index == len(self) - 1:
+            raise StopIteration
+        self._index += 1
+        return self[self._index]
+
+    def __getitem__(self, item):
+        return self.array[item]
+
+    def __setitem__(self, key, value):
+        self.array[key] = value
+
     def mutate_inversion(self):
         """Mutate in-place using inversion mutation."""
         size = len(self)
         first_pos = rd.randrange(0, size - 1)
         second_pos = rd.randrange(first_pos, size)
-        self.array[first_pos:second_pos + 1] = np.flip(self.array[first_pos:second_pos + 1])
+        self[first_pos:second_pos + 1] = np.flip(self[first_pos:second_pos + 1])
 
     def mutate_swap(self):
         """Mutate in-place using swap mutation."""
@@ -36,16 +53,16 @@ class Candidate:
         second_pos = first_pos
         while second_pos == first_pos:
             second_pos = rd.randrange(0, size)
-        tmp = self.array[first_pos]
-        self.array[first_pos] = self.array[second_pos]
-        self.array[second_pos] = tmp
+        tmp = self[first_pos]
+        self[first_pos] = self[second_pos]
+        self[second_pos] = tmp
 
     def mutate_scramble(self):
         """Mutate in-place using scramble mutation."""
         size = len(self)
         first_pos = rd.randrange(0, size - 1)
         second_pos = rd.randrange(first_pos, size)
-        np.random.shuffle(self.array[first_pos:second_pos + 1])
+        np.random.shuffle(self[first_pos:second_pos + 1])
 
     def mutate_insert(self):
         """Mutate in-place using insert mutation."""
@@ -57,8 +74,8 @@ class Candidate:
         size = len(self)
         for i in range(size - 1):
             # Order is important for the distance matrix.
-            result += distance_matrix[self.array[i]][self.array[i + 1]]
-        result += distance_matrix[self.array[size - 1]][self.array[0]]
+            result += distance_matrix[self[i]][self[i + 1]]
+        result += distance_matrix[self[size - 1]][self[0]]
         return result
 
 
@@ -66,7 +83,7 @@ class NoNextElementException(Exception):
     """Exception used in edge crossover recombination."""
 
 
-def recombine_cycle_crossover(parent1, parent2):
+def recombine_cycle_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
     """Use two parent candidates to produce two offspring using cycle crossover."""
     cycles = find_cycles(parent1, parent2)
     offspring1 = np.zeros_like(parent1)
@@ -74,17 +91,17 @@ def recombine_cycle_crossover(parent1, parent2):
     for i, cycle in enumerate(cycles):
         if i % 2 == 0:
             for idx in cycle:
-                offspring1[idx] = parent1[idx]
-                offspring2[idx] = parent2[idx]
+                offspring1[idx] = parent1.array[idx]
+                offspring2[idx] = parent2.array[idx]
         else:
             for idx in cycle:
-                offspring1[idx] = parent2[idx]
-                offspring2[idx] = parent1[idx]
-    return [offspring1, offspring2]
+                offspring1[idx] = parent2.array[idx]
+                offspring2[idx] = parent1.array[idx]
+    return [Candidate(offspring1), Candidate(offspring2)]
 
 
-def find_cycles(parent1, parent2):
-    """Returns all cycles of parent1 and parent2 as a list of lists of indices."""
+def find_cycles(parent1: Candidate, parent2: Candidate) -> list[list[int]]:
+    """Returns all cycles of the parents using indices."""
     unused_idx = list(range(len(parent1)))
     cycles = []
     while len(unused_idx) != 0:
@@ -93,7 +110,7 @@ def find_cycles(parent1, parent2):
         unused_idx.remove(current_idx)
         cycle = [current_idx]
         while True:
-            allele_p2 = parent2[current_idx]
+            allele_p2 = parent2.array[current_idx]
             current_idx = index_of(parent1, allele_p2)
             if current_idx == start_idx:
                 break
@@ -103,7 +120,7 @@ def find_cycles(parent1, parent2):
     return cycles
 
 
-def recombine_edge_crossover(parent1, parent2):
+def recombine_edge_crossover(parent1: Candidate, parent2: Candidate):
     """Use two parent candidates to produce one offspring using edge crossover."""
     adj_table = create_adj_table(parent1, parent2)
     remaining = [x for x in parent1]
@@ -165,7 +182,7 @@ def remove_references(adj_table, value):
                 break
 
 
-def create_adj_table(candidate1, candidate2):
+def create_adj_table(candidate1: Candidate, candidate2: Candidate):
     """Create an adjacency table for candidate1 and candidate2."""
     adj_table = {x: [] for x in candidate1}
     for x in adj_table:
