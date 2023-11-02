@@ -274,11 +274,22 @@ def init_avoid_inf_heuristic(distance_matrix: np.ndarray, population_size: int) 
 
 def select_k_tournament(population: list[Candidate], k: int,
                         fitness_function, distance_matrix: np.ndarray) -> Candidate:
-    """Performs a k-tournament on the population. Returns the best candidate."""
+    """Performs a k-tournament on the population. Returns the best candidate among k random samples."""
     selected = []
     for i in range(k):
         selected.append(rd.choice(population))
     return min(selected, key=lambda x: fitness_function(x, distance_matrix))
+
+
+def select_top_k(population: list[Candidate], k: int,
+                 fitness_function, distance_matrix: np.ndarray) -> Candidate:
+    """Performs top-k selection on the population. Returns a random candidate among the k best candidates.
+    Assumes that population is already sorted from best to worst; this is the case
+    when using (lambda+mu) elimination.
+    This function does not actually use the fitness function and distance matrix,
+    but takes them as arguments for compatibility with other selection functions.
+    """
+    return rd.choice(population[:k])
 
 
 # Modify the class name to match your student number.
@@ -286,16 +297,16 @@ class r0758170:
 
     def __init__(self):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
-        self.k_in_k_tournament = 5
+        self.k_in_selection = 5
         self.population = []
         self.population_size = 100
         self.nr_offspring = 100  # Must be even.
         self.mutate_chance = 0.05
-        self.mutation_function = mutate_swap
-        self.recombine_function = recombine_PMX
+        self.mutation_function = mutate_inversion
+        self.recombine_function = recombine_edge_crossover
         self.fitness_function = fitness_length
-        self.init_function = init_avoid_inf_heuristic
-        self.selection = select_k_tournament
+        self.init_function = init_monte_carlo
+        self.select_function = select_k_tournament
 
     # The evolutionary algorithm's main loop
     def optimize(self, filename):
@@ -319,8 +330,8 @@ class r0758170:
             selected = []
             for i in range(2 * self.nr_offspring):
                 selected.append(
-                    select_k_tournament(
-                        self.population, self.k_in_k_tournament, self.fitness_function, distance_matrix))
+                    self.select_function(
+                        self.population, self.k_in_selection, self.fitness_function, distance_matrix))
 
             # Variation
             # Recombination will produce new offspring using the selected candidates.
