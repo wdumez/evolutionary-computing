@@ -5,10 +5,12 @@ import numpy as np
 
 import Reporter
 
-
 # SEED = 2
 # rd.seed(SEED)
 # np.random.seed(SEED)
+
+AdjacencyTable = dict[int: list[tuple[int, bool]]]
+
 
 class Candidate:
     """Represents a candidate for the Traveling Salesperson problem."""
@@ -91,12 +93,12 @@ def recombine_cycle_crossover(parent1: Candidate, parent2: Candidate) -> list[Ca
     for i, cycle in enumerate(cycles):
         if i % 2 == 0:
             for idx in cycle:
-                offspring1[idx] = parent1.array[idx]
-                offspring2[idx] = parent2.array[idx]
+                offspring1[idx] = parent1[idx]
+                offspring2[idx] = parent2[idx]
         else:
             for idx in cycle:
-                offspring1[idx] = parent2.array[idx]
-                offspring2[idx] = parent1.array[idx]
+                offspring1[idx] = parent2[idx]
+                offspring2[idx] = parent1[idx]
     return [Candidate(offspring1), Candidate(offspring2)]
 
 
@@ -110,7 +112,7 @@ def find_cycles(parent1: Candidate, parent2: Candidate) -> list[list[int]]:
         unused_idx.remove(current_idx)
         cycle = [current_idx]
         while True:
-            allele_p2 = parent2.array[current_idx]
+            allele_p2 = parent2[current_idx]
             current_idx = index_of(parent1, allele_p2)
             if current_idx == start_idx:
                 break
@@ -120,7 +122,7 @@ def find_cycles(parent1: Candidate, parent2: Candidate) -> list[list[int]]:
     return cycles
 
 
-def recombine_edge_crossover(parent1: Candidate, parent2: Candidate):
+def recombine_edge_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
     """Use two parent candidates to produce one offspring using edge crossover."""
     adj_table = create_adj_table(parent1, parent2)
     remaining = [x for x in parent1]
@@ -145,10 +147,10 @@ def recombine_edge_crossover(parent1: Candidate, parent2: Candidate):
                 result.append(current_element)
                 remaining.remove(current_element)
                 remove_references(adj_table, current_element)
-    return [np.array(result)]
+    return [Candidate(np.array(result))]
 
 
-def pick_next_element(adj_table, current_element):
+def pick_next_element(adj_table: AdjacencyTable, current_element: int):
     """Returns the next element to extend the offspring with.
     Raises NoNextElementException if there is no next element to extend with.
     """
@@ -171,7 +173,7 @@ def pick_next_element(adj_table, current_element):
     return next_element
 
 
-def remove_references(adj_table, value):
+def remove_references(adj_table: AdjacencyTable, value: int):
     """Removes all references of value in the lists of adj_table."""
     for x, lst in adj_table.items():
         if x == value:
@@ -182,7 +184,7 @@ def remove_references(adj_table, value):
                 break
 
 
-def create_adj_table(candidate1: Candidate, candidate2: Candidate):
+def create_adj_table(candidate1: Candidate, candidate2: Candidate) -> AdjacencyTable:
     """Create an adjacency table for candidate1 and candidate2."""
     adj_table = {x: [] for x in candidate1}
     for x in adj_table:
@@ -199,18 +201,18 @@ def create_adj_table(candidate1: Candidate, candidate2: Candidate):
     return adj_table
 
 
-def get_adj(x, candidate):
+def get_adj(x: int, candidate: Candidate) -> list[int]:
     """Returns the adjacent values of x in candidate as a list."""
     x_idx = index_of(candidate, x)
     prev_idx = x_idx - 1
-    next_idx = x_idx + 1 if x_idx < candidate.size - 1 else 0
+    next_idx = x_idx + 1 if x_idx < len(candidate) - 1 else 0
     return [candidate[prev_idx], candidate[next_idx]]
 
 
-def recombine_PMX(parent1, parent2):
+def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
     """Use two parent candidates to produce one offspring using partially mapped crossover."""
     # TODO Refactor this to produce two offspring.
-    size = parent1.size
+    size = len(parent1)
     offspring = np.zeros_like(parent1)
     # We must initialize offspring with -1's, to identify whether a spot is not yet filled.
     for i in range(size):
@@ -231,39 +233,33 @@ def recombine_PMX(parent1, parent2):
     for i in range(size):
         if offspring[i] == -1:
             offspring[i] = parent2[i]
-    return [offspring]
+    return [Candidate(offspring)]
 
 
-def recombine_order_crossover(parent1, parent2):
+def recombine_order_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
     """Use two parent candidates to produce one offspring using order crossover."""
-    size = parent1.size
-    offspring = np.zeros_like(parent1)
-
-    first_pos = rd.randint(0, size - 2)
-    second_pos = rd.randint(first_pos, size - 1)
-    offspring[first_pos:second_pos + 1] = parent1[first_pos:second_pos + 1]
-
     raise NotImplementedError
 
 
-def index_of(array, value):
+def index_of(array: np.ndarray | Candidate, value: int) -> int:
     """Return the first index at which value occurs in array.
     This is just a convenience function for numpy arrays, which behaves like list.index(value).
+    This also works straight on Candidate objects.
     """
     return int(np.where(array == value)[0][0])
 
 
-def init_monte_carlo(distance_matrix, population_size):
+def init_monte_carlo(distance_matrix: np.ndarray, population_size: int) -> [Candidate]:
     """Initializes the population at random."""
     population = []
     for i in range(population_size):
-        candidate = np.array(list(range(len(distance_matrix))))
-        np.random.shuffle(candidate)
-        population.append(candidate)
+        array = np.array(list(range(len(distance_matrix))))
+        np.random.shuffle(array)
+        population.append(Candidate(array))
     return population
 
 
-def init_avoid_inf_heuristic(distance_matrix, population_size):
+def init_avoid_inf_heuristic(distance_matrix: np.ndarray, population_size: int) -> list[Candidate]:
     """Initializes the population using a heuristic which avoids infinite values."""
     population = []
     for i in range(population_size):
@@ -291,12 +287,13 @@ def init_avoid_inf_heuristic(distance_matrix, population_size):
                     choice = rd.choice(possible_next)
                 candidate.append(choice)
                 choices.remove(choice)
-        population.append(np.array(candidate))
+        population.append(Candidate(np.array(candidate)))
     return population
 
 
-def select_k_tournament(population, k, fitness_function, distance_matrix):
-    """Performs a k-tournament on the population. Returns one candidate."""
+def select_k_tournament(population: list[Candidate], k: int,
+                        fitness_function, distance_matrix: np.ndarray) -> Candidate:
+    """Performs a k-tournament on the population. Returns the best candidate."""
     selected = []
     for i in range(k):
         selected.append(rd.choice(population))
