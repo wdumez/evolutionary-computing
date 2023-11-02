@@ -18,7 +18,6 @@ class Candidate:
 
     def __init__(self, array):
         self.array = array
-        self._index = -1
 
     def __repr__(self) -> str:
         return str(self.array)
@@ -27,14 +26,7 @@ class Candidate:
         return len(self.array)
 
     def __iter__(self):
-        self._index = -1
-        return self
-
-    def __next__(self):
-        if self._index == len(self) - 1:
-            raise StopIteration
-        self._index += 1
-        return self[self._index]
+        return iter(self.array)
 
     def __getitem__(self, item):
         return self.array[item]
