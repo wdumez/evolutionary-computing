@@ -40,18 +40,16 @@ class Candidate:
         self.array[first_pos] = self.array[second_pos]
         self.array[second_pos] = tmp
 
+    def mutate_scramble(self):
+        """Mutate in-place using scramble mutation."""
+        size = len(self)
+        first_pos = rd.randrange(0, size - 1)
+        second_pos = rd.randrange(first_pos, size)
+        np.random.shuffle(self.array[first_pos:second_pos + 1])
 
-def mutate_scramble(candidate):
-    """Mutate a candidate solution in-place using scramble mutation."""
-    size = candidate.size
-    first_pos = rd.randrange(0, size - 1)
-    second_pos = rd.randrange(first_pos, size)
-    np.random.shuffle(candidate[first_pos:second_pos + 1])
-
-
-def mutate_insert(candidate):
-    """Mutate a candidate in-place using insert mutation."""
-    raise NotImplementedError
+    def mutate_insert(self):
+        """Mutate in-place using insert mutation."""
+        raise NotImplementedError
 
 
 def recombine_cycle_crossover(parent1, parent2):
