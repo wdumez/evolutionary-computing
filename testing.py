@@ -14,5 +14,5 @@ b = np.array([9, 3, 7, 8, 2, 6, 5, 1, 4])
 
 a_c = Candidate(a)
 print(a_c)
-a_c.mutate_inversion()
+a_c.mutate_swap()
 print(a_c)

@@ -11,6 +11,7 @@ import Reporter
 # np.random.seed(SEED)
 
 class Candidate:
+    """Represents a candidate for the Traveling Salesperson problem."""
 
     def __init__(self, array):
         self.array = array
@@ -22,23 +23,22 @@ class Candidate:
         return len(self.array)
 
     def mutate_inversion(self):
-        """Mutate a candidate solution in-place using inversion mutation."""
+        """Mutate in-place using inversion mutation."""
         size = len(self)
         first_pos = rd.randrange(0, size - 1)
         second_pos = rd.randrange(first_pos, size)
         self.array[first_pos:second_pos + 1] = np.flip(self.array[first_pos:second_pos + 1])
 
-
-def mutate_swap(candidate):
-    """Mutate a candidate solution in-place using swap mutation."""
-    size = candidate.size
-    first_pos = rd.randrange(0, size)
-    second_pos = first_pos
-    while second_pos == first_pos:
-        second_pos = rd.randrange(0, size)
-    tmp = candidate[first_pos]
-    candidate[first_pos] = candidate[second_pos]
-    candidate[second_pos] = tmp
+    def mutate_swap(self):
+        """Mutate in-place using swap mutation."""
+        size = len(self)
+        first_pos = rd.randrange(0, size)
+        second_pos = first_pos
+        while second_pos == first_pos:
+            second_pos = rd.randrange(0, size)
+        tmp = self.array[first_pos]
+        self.array[first_pos] = self.array[second_pos]
+        self.array[second_pos] = tmp
 
 
 def mutate_scramble(candidate):
