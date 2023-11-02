@@ -10,6 +10,14 @@ import Reporter
 # rd.seed(SEED)
 # np.random.seed(SEED)
 
+class Candidate:
+
+    def __init__(self, array):
+        self.array = array
+
+    def __str__(self):
+        return str(self.array)
+
 
 def mutate_inversion(candidate):
     """Mutate a candidate solution in-place using inversion mutation."""
