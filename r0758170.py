@@ -17,7 +17,7 @@ Candidate: TypeAlias = NDArray[int]
 
 def mutate_inversion(candidate: Candidate) -> None:
     """Mutate in-place using inversion mutation."""
-    size = len(candidate)
+    size = candidate.size
     first_pos = rd.randrange(0, size - 1)
     second_pos = rd.randrange(first_pos, size)
     candidate[first_pos:second_pos + 1] = np.flip(candidate[first_pos:second_pos + 1])
@@ -25,7 +25,7 @@ def mutate_inversion(candidate: Candidate) -> None:
 
 def mutate_swap(candidate: Candidate) -> None:
     """Mutate in-place using swap mutation."""
-    size = len(candidate)
+    size = candidate.size
     first_pos = rd.randrange(0, size)
     second_pos = first_pos
     while second_pos == first_pos:
@@ -37,7 +37,7 @@ def mutate_swap(candidate: Candidate) -> None:
 
 def mutate_scramble(candidate: Candidate) -> None:
     """Mutate in-place using scramble mutation."""
-    size = len(candidate)
+    size = candidate.size
     first_pos = rd.randrange(0, size - 1)
     second_pos = rd.randrange(first_pos, size)
     np.random.shuffle(candidate[first_pos:second_pos + 1])
@@ -51,7 +51,7 @@ def mutate_insert(candidate: Candidate) -> None:
 def fitness_length(candidate: Candidate, distance_matrix: NDArray) -> float:
     """Return the length of the path."""
     result = 0.0
-    size = len(candidate)
+    size = candidate.size
     for i in range(size - 1):
         # Order is important for the distance matrix.
         result += distance_matrix[candidate[i]][candidate[i + 1]]
@@ -183,7 +183,7 @@ def get_adj(x: int, candidate: Candidate) -> list[int]:
     """Returns the adjacent values of x in candidate as a list."""
     x_idx = index_of(candidate, x)
     prev_idx = x_idx - 1
-    next_idx = x_idx + 1 if x_idx < len(candidate) - 1 else 0
+    next_idx = x_idx + 1 if x_idx < candidate.size - 1 else 0
     return [int(candidate[prev_idx]), int(candidate[next_idx])]
 
 
@@ -288,9 +288,9 @@ class r0758170:
         self.population = []
         self.population_size = 100
         self.nr_offspring = 100  # Must be even.
-        self.mutate_chance = 0.50
+        self.mutate_chance = 0.25
         self.mutation_function = mutate_inversion
-        self.recombine_function = recombine_edge_crossover
+        self.recombine_function = recombine_cycle_crossover
         self.fitness_function = fitness_length
         self.init_function = init_avoid_inf_heuristic
         self.selection = select_k_tournament
