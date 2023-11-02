@@ -242,7 +242,7 @@ def init_avoid_inf_heuristic(distance_matrix: np.ndarray, population_size: int) 
     """Initializes the population using a heuristic which avoids infinite values."""
     population = []
     for i in range(population_size):
-        choices = list(range(population_size))
+        choices = list(range(len(distance_matrix)))
         candidate = []
         while len(choices) != 0:
             if len(candidate) == 0:  # The first element is picked at random.
@@ -284,12 +284,12 @@ class r0758170:
 
     def __init__(self):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
-        self.k = 5
+        self.k_in_k_tournament = 5
         self.population = []
         self.population_size = 100
         self.nr_offspring = 100  # Must be even.
         self.mutate_chance = 0.50
-        self.mutation_function = mutate_swap
+        self.mutation_function = mutate_inversion
         self.recombine_function = recombine_edge_crossover
         self.fitness_function = fitness_length
         self.init_function = init_avoid_inf_heuristic
@@ -316,7 +316,9 @@ class r0758170:
             # Two offspring: need self.mu selected.
             selected = []
             for i in range(2 * self.nr_offspring):
-                selected.append(select_k_tournament(self.population, self.k, self.fitness_function, distance_matrix))
+                selected.append(
+                    select_k_tournament(
+                        self.population, self.k_in_k_tournament, self.fitness_function, distance_matrix))
 
             # Variation
             # Recombination will produce new offspring using the selected candidates.
@@ -358,7 +360,7 @@ class r0758170:
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            print(f'{current_it:5} | mean: {mean_objective:.2f} | best:{best_objective:.2f}')
+            print(f'{current_it:6} | mean: {mean_objective:7.2f} | best:{best_objective:7.2f}')
             timeLeft = self.reporter.report(mean_objective, best_objective, best_solution)
             if timeLeft < 0:
                 break
