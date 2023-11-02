@@ -9,6 +9,7 @@ import Reporter
 # rd.seed(SEED)
 # np.random.seed(SEED)
 
+# Type aliases.
 AdjacencyTable = dict[int: list[tuple[int, bool]]]
 
 
@@ -310,9 +311,9 @@ class r0758170:
         self.population_size = 100
         self.nr_offspring = 100  # Must be even.
         self.mutate_chance = 0.05
-        self.mutation_function = mutate_scramble
+        self.mutation_function = Candidate.mutate_scramble
         self.recombine_function = recombine_edge_crossover
-        self.fitness_function = fitness_length
+        self.fitness_function = Candidate.fitness_length
         self.init_function = init_avoid_inf_heuristic
         self.selection = select_k_tournament
 
@@ -320,14 +321,14 @@ class r0758170:
     def optimize(self, filename):
         # Read distance matrix from file.
         file = open(filename)
-        distanceMatrix = np.loadtxt(file, delimiter=",")
+        distance_matrix = np.loadtxt(file, delimiter=",")
         file.close()
 
         # Initialization
-        self.population = self.init_function(distanceMatrix, self.population_size)
+        self.population = self.init_function(distance_matrix, self.population_size)
 
         best_solution = self.population[0]
-        best_objective = self.fitness_function(best_solution, distanceMatrix)
+        best_objective = best_solution.fitness_length(distance_matrix)
         while True:
             # Selection
             # Perform a certain number of k-tournaments; this depends on self.mu
@@ -336,7 +337,7 @@ class r0758170:
             # Two offspring: need self.mu selected.
             selected = []
             for i in range(2 * self.nr_offspring):
-                selected.append(select_k_tournament(self.population, self.k, self.fitness_function, distanceMatrix))
+                selected.append(select_k_tournament(self.population, self.k, self.fitness_function, distance_matrix))
 
             # Variation
             # Recombination will produce new offspring using the selected candidates.
@@ -351,19 +352,19 @@ class r0758170:
             # Mutation will happend on the entire population and new offspring, with a certain probability.
             for candidate in self.population:
                 if rd.random() < self.mutate_chance:
-                    self.mutation_function(candidate)
+                    self.mutation_function(candidate)  # This works, but Pycharm complains...
 
             # Elimination
             # Lambda + mu elimination: keep only the best candidates.
-            self.population.sort(key=lambda x: self.fitness_function(x, distanceMatrix))
+            self.population.sort(key=lambda x: self.fitness_function(x, distance_matrix))
             self.population = self.population[:self.population_size]
 
             # Recalculate mean and best.
             mean_objective = 0.0
             current_best_solution = self.population[0]
-            current_best_objective = self.fitness_function(current_best_solution, distanceMatrix)
+            current_best_objective = self.fitness_function(current_best_solution, distance_matrix)
             for candidate in self.population:
-                candidate_fitness = self.fitness_function(candidate, distanceMatrix)
+                candidate_fitness = self.fitness_function(candidate, distance_matrix)
                 mean_objective += candidate_fitness
                 if candidate_fitness < current_best_objective:
                     current_best_objective = candidate_fitness
@@ -379,7 +380,7 @@ class r0758170:
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
             # print(f'{current_it:5} | mean: {mean_objective:.2f} | best:{best_objective:.2f}')
-            timeLeft = self.reporter.report(mean_objective, best_objective, best_solution)
+            timeLeft = self.reporter.report(mean_objective, best_objective, best_solution.array)
             if timeLeft < 0:
                 break
 
