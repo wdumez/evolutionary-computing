@@ -1,7 +1,9 @@
 import random as rd
+from typing import TypeAlias
 
 import math
 import numpy as np
+from numpy.typing import NDArray
 
 import Reporter
 
@@ -10,68 +12,51 @@ import Reporter
 # np.random.seed(SEED)
 
 # Type aliases.
-AdjacencyTable = dict[int: list[tuple[int, bool]]]
+Candidate: TypeAlias = NDArray[int]
 
 
-class Candidate:
-    """Represents a candidate for the Traveling Salesperson problem."""
+def mutate_inversion(candidate: Candidate) -> None:
+    """Mutate in-place using inversion mutation."""
+    size = len(candidate)
+    first_pos = rd.randrange(0, size - 1)
+    second_pos = rd.randrange(first_pos, size)
+    candidate[first_pos:second_pos + 1] = np.flip(candidate[first_pos:second_pos + 1])
 
-    def __init__(self, array):
-        self.array = array
 
-    def __repr__(self) -> str:
-        return str(self.array)
+def mutate_swap(candidate: Candidate) -> None:
+    """Mutate in-place using swap mutation."""
+    size = len(candidate)
+    first_pos = rd.randrange(0, size)
+    second_pos = first_pos
+    while second_pos == first_pos:
+        second_pos = rd.randrange(0, size)
+    tmp = candidate[first_pos]
+    candidate[first_pos] = candidate[second_pos]
+    candidate[second_pos] = tmp
 
-    def __len__(self) -> int:
-        return len(self.array)
 
-    def __iter__(self):
-        return iter(self.array)
+def mutate_scramble(candidate: Candidate) -> None:
+    """Mutate in-place using scramble mutation."""
+    size = len(candidate)
+    first_pos = rd.randrange(0, size - 1)
+    second_pos = rd.randrange(first_pos, size)
+    np.random.shuffle(candidate[first_pos:second_pos + 1])
 
-    def __getitem__(self, item):
-        return self.array[item]
 
-    def __setitem__(self, key, value):
-        self.array[key] = value
+def mutate_insert(candidate: Candidate) -> None:
+    """Mutate in-place using insert mutation."""
+    raise NotImplementedError
 
-    def mutate_inversion(self):
-        """Mutate in-place using inversion mutation."""
-        size = len(self)
-        first_pos = rd.randrange(0, size - 1)
-        second_pos = rd.randrange(first_pos, size)
-        self[first_pos:second_pos + 1] = np.flip(self[first_pos:second_pos + 1])
 
-    def mutate_swap(self):
-        """Mutate in-place using swap mutation."""
-        size = len(self)
-        first_pos = rd.randrange(0, size)
-        second_pos = first_pos
-        while second_pos == first_pos:
-            second_pos = rd.randrange(0, size)
-        tmp = self[first_pos]
-        self[first_pos] = self[second_pos]
-        self[second_pos] = tmp
-
-    def mutate_scramble(self):
-        """Mutate in-place using scramble mutation."""
-        size = len(self)
-        first_pos = rd.randrange(0, size - 1)
-        second_pos = rd.randrange(first_pos, size)
-        np.random.shuffle(self[first_pos:second_pos + 1])
-
-    def mutate_insert(self):
-        """Mutate in-place using insert mutation."""
-        raise NotImplementedError
-
-    def fitness_length(self, distance_matrix) -> float:
-        """Return the length of the path."""
-        result = 0.0
-        size = len(self)
-        for i in range(size - 1):
-            # Order is important for the distance matrix.
-            result += distance_matrix[self[i]][self[i + 1]]
-        result += distance_matrix[self[size - 1]][self[0]]
-        return result
+def fitness_length(candidate: Candidate, distance_matrix: NDArray) -> float:
+    """Return the length of the path."""
+    result = 0.0
+    size = len(candidate)
+    for i in range(size - 1):
+        # Order is important for the distance matrix.
+        result += distance_matrix[candidate[i]][candidate[i + 1]]
+    result += distance_matrix[candidate[size - 1]][candidate[0]]
+    return result
 
 
 class NoNextElementException(Exception):
@@ -92,7 +77,7 @@ def recombine_cycle_crossover(parent1: Candidate, parent2: Candidate) -> list[Ca
             for idx in cycle:
                 offspring1[idx] = parent2[idx]
                 offspring2[idx] = parent1[idx]
-    return [Candidate(offspring1), Candidate(offspring2)]
+    return [offspring1, offspring2]
 
 
 def find_cycles(parent1: Candidate, parent2: Candidate) -> list[list[int]]:
@@ -105,7 +90,7 @@ def find_cycles(parent1: Candidate, parent2: Candidate) -> list[list[int]]:
         unused_idx.remove(current_idx)
         cycle = [current_idx]
         while True:
-            allele_p2 = parent2[current_idx]
+            allele_p2 = int(parent2[current_idx])
             current_idx = index_of(parent1, allele_p2)
             if current_idx == start_idx:
                 break
@@ -140,10 +125,10 @@ def recombine_edge_crossover(parent1: Candidate, parent2: Candidate) -> list[Can
                 result.append(current_element)
                 remaining.remove(current_element)
                 remove_references(adj_table, current_element)
-    return [Candidate(np.array(result))]
+    return [np.array(result)]
 
 
-def pick_next_element(adj_table: AdjacencyTable, current_element: int):
+def pick_next_element(adj_table: dict[int, list[tuple[int, bool]]], current_element: int) -> int:
     """Returns the next element to extend the offspring with.
     Raises NoNextElementException if there is no next element to extend with.
     """
@@ -166,7 +151,7 @@ def pick_next_element(adj_table: AdjacencyTable, current_element: int):
     return next_element
 
 
-def remove_references(adj_table: AdjacencyTable, value: int):
+def remove_references(adj_table: dict[int, list[tuple[int, bool]]], value: int):
     """Removes all references of value in the lists of adj_table."""
     for x, lst in adj_table.items():
         if x == value:
@@ -177,7 +162,7 @@ def remove_references(adj_table: AdjacencyTable, value: int):
                 break
 
 
-def create_adj_table(candidate1: Candidate, candidate2: Candidate) -> AdjacencyTable:
+def create_adj_table(candidate1: Candidate, candidate2: Candidate) -> dict[int, list[tuple[int, bool]]]:
     """Create an adjacency table for candidate1 and candidate2."""
     adj_table = {x: [] for x in candidate1}
     for x in adj_table:
@@ -199,7 +184,7 @@ def get_adj(x: int, candidate: Candidate) -> list[int]:
     x_idx = index_of(candidate, x)
     prev_idx = x_idx - 1
     next_idx = x_idx + 1 if x_idx < len(candidate) - 1 else 0
-    return [candidate[prev_idx], candidate[next_idx]]
+    return [int(candidate[prev_idx]), int(candidate[next_idx])]
 
 
 def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
@@ -226,7 +211,7 @@ def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
     for i in range(size):
         if offspring[i] == -1:
             offspring[i] = parent2[i]
-    return [Candidate(offspring)]
+    return [offspring]
 
 
 def recombine_order_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
@@ -234,7 +219,7 @@ def recombine_order_crossover(parent1: Candidate, parent2: Candidate) -> list[Ca
     raise NotImplementedError
 
 
-def index_of(array: np.ndarray | Candidate, value: int) -> int:
+def index_of(array: Candidate, value: int) -> int:
     """Return the first index at which value occurs in array.
     This is just a convenience function for numpy arrays, which behaves like list.index(value).
     This also works straight on Candidate objects.
@@ -245,10 +230,11 @@ def index_of(array: np.ndarray | Candidate, value: int) -> int:
 def init_monte_carlo(distance_matrix: np.ndarray, population_size: int) -> [Candidate]:
     """Initializes the population at random."""
     population = []
+    sample = list(range(len(distance_matrix)))
     for i in range(population_size):
-        array = np.array(list(range(len(distance_matrix))))
+        array = np.array(sample)
         np.random.shuffle(array)
-        population.append(Candidate(array))
+        population.append(array)
     return population
 
 
@@ -280,7 +266,7 @@ def init_avoid_inf_heuristic(distance_matrix: np.ndarray, population_size: int) 
                     choice = rd.choice(possible_next)
                 candidate.append(choice)
                 choices.remove(choice)
-        population.append(Candidate(np.array(candidate)))
+        population.append(np.array(candidate))
     return population
 
 
@@ -302,10 +288,10 @@ class r0758170:
         self.population = []
         self.population_size = 100
         self.nr_offspring = 100  # Must be even.
-        self.mutate_chance = 0.05
-        self.mutation_function = Candidate.mutate_scramble
+        self.mutate_chance = 0.50
+        self.mutation_function = mutate_swap
         self.recombine_function = recombine_edge_crossover
-        self.fitness_function = Candidate.fitness_length
+        self.fitness_function = fitness_length
         self.init_function = init_avoid_inf_heuristic
         self.selection = select_k_tournament
 
@@ -321,7 +307,7 @@ class r0758170:
 
         current_it = 1
         best_solution = self.population[0]
-        best_objective = best_solution.fitness_length(distance_matrix)
+        best_objective = self.fitness_function(best_solution, distance_matrix)
         while True:
             # Selection
             # Perform a certain number of k-tournaments; this depends on self.mu
@@ -345,7 +331,7 @@ class r0758170:
             # Mutation will happend on the entire population and new offspring, with a certain probability.
             for candidate in self.population:
                 if rd.random() < self.mutate_chance:
-                    self.mutation_function(candidate)  # This works, but Pycharm complains...
+                    self.mutation_function(candidate)
 
             # Elimination
             # Lambda + mu elimination: keep only the best candidates.
@@ -372,8 +358,8 @@ class r0758170:
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            # print(f'{current_it:5} | mean: {mean_objective:.2f} | best:{best_objective:.2f}')
-            timeLeft = self.reporter.report(mean_objective, best_objective, best_solution.array)
+            print(f'{current_it:5} | mean: {mean_objective:.2f} | best:{best_objective:.2f}')
+            timeLeft = self.reporter.report(mean_objective, best_objective, best_solution)
             if timeLeft < 0:
                 break
             current_it += 1
