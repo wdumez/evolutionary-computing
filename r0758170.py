@@ -16,10 +16,10 @@ class Candidate:
     def __init__(self, array):
         self.array = array
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.array)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.array)
 
     def mutate_inversion(self):
@@ -50,6 +50,20 @@ class Candidate:
     def mutate_insert(self):
         """Mutate in-place using insert mutation."""
         raise NotImplementedError
+
+    def fitness_length(self, distance_matrix) -> float:
+        """Return the length of the path."""
+        result = 0.0
+        size = len(self)
+        for i in range(size - 1):
+            # Order is important for the distance matrix.
+            result += distance_matrix[self.array[i]][self.array[i + 1]]
+        result += distance_matrix[self.array[size - 1]][self.array[0]]
+        return result
+
+
+class NoNextElementException(Exception):
+    """Exception used in edge crossover recombination."""
 
 
 def recombine_cycle_crossover(parent1, parent2):
@@ -115,10 +129,6 @@ def recombine_edge_crossover(parent1, parent2):
                 remaining.remove(current_element)
                 remove_references(adj_table, current_element)
     return [np.array(result)]
-
-
-class NoNextElementException(Exception):
-    """Exception used in edge crossover recombination."""
 
 
 def pick_next_element(adj_table, current_element):
@@ -216,7 +226,7 @@ def recombine_order_crossover(parent1, parent2):
     second_pos = rd.randint(first_pos, size - 1)
     offspring[first_pos:second_pos + 1] = parent1[first_pos:second_pos + 1]
 
-    raise NotImplemented
+    raise NotImplementedError
 
 
 def index_of(array, value):
@@ -224,17 +234,6 @@ def index_of(array, value):
     This is just a convenience function for numpy arrays, which behaves like list.index(value).
     """
     return int(np.where(array == value)[0][0])
-
-
-def fitness_length(candidate, distance_matrix):
-    """Calculate the length of the path of candidate."""
-    result = 0.0
-    size = candidate.size
-    for i in range(size - 1):
-        # Order is important for the distance matrix.
-        result += distance_matrix[candidate[i]][candidate[i + 1]]
-    result += distance_matrix[candidate[size - 1]][candidate[0]]
-    return result
 
 
 def init_monte_carlo(distance_matrix, population_size):
