@@ -1,5 +1,4 @@
 import random as rd
-from time import time
 
 import math
 import numpy as np
@@ -219,7 +218,7 @@ def index_of(array, value):
     return int(np.where(array == value)[0][0])
 
 
-def length(candidate, distance_matrix):
+def fitness_length(candidate, distance_matrix):
     """Calculate the length of the path of candidate."""
     result = 0.0
     size = candidate.size
@@ -272,7 +271,7 @@ def init_avoid_inf_heuristic(distance_matrix, population_size):
     return population
 
 
-def k_tournament(population, k, fitness_function, distance_matrix):
+def select_k_tournament(population, k, fitness_function, distance_matrix):
     """Performs a k-tournament on the population. Returns one candidate."""
     selected = []
     for i in range(k):
@@ -288,17 +287,16 @@ class r0758170:
         self.k = 5
         self.population = []
         self.population_size = 100
-        self.mu = 100  # Must be even.
+        self.nr_offspring = 100  # Must be even.
         self.mutate_chance = 0.05
         self.mutation_function = mutate_scramble
         self.recombine_function = recombine_edge_crossover
-        self.fitness_function = length
+        self.fitness_function = fitness_length
         self.init_function = init_avoid_inf_heuristic
-        self.selection = k_tournament
+        self.selection = select_k_tournament
 
     # The evolutionary algorithm's main loop
     def optimize(self, filename):
-        start_time = time()
         # Read distance matrix from file.
         file = open(filename)
         distanceMatrix = np.loadtxt(file, delimiter=",")
@@ -307,8 +305,6 @@ class r0758170:
         # Initialization
         self.population = self.init_function(distanceMatrix, self.population_size)
 
-        # max_it = 2000
-        # current_it = 1
         best_solution = self.population[0]
         best_objective = self.fitness_function(best_solution, distanceMatrix)
         while True:
@@ -318,8 +314,8 @@ class r0758170:
             # One offspring: need 2 * self.mu selected.
             # Two offspring: need self.mu selected.
             selected = []
-            for i in range(2 * self.mu):
-                selected.append(k_tournament(self.population, self.k, self.fitness_function, distanceMatrix))
+            for i in range(2 * self.nr_offspring):
+                selected.append(select_k_tournament(self.population, self.k, self.fitness_function, distanceMatrix))
 
             # Variation
             # Recombination will produce new offspring using the selected candidates.
@@ -341,8 +337,6 @@ class r0758170:
             self.population.sort(key=lambda x: self.fitness_function(x, distanceMatrix))
             self.population = self.population[:self.population_size]
 
-            # print(f'New pop: \n{[self.fitness_function(x, distanceMatrix) for x in self.population]}')
-
             # Recalculate mean and best.
             mean_objective = 0.0
             current_best_solution = self.population[0]
@@ -363,14 +357,10 @@ class r0758170:
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            current_time = time() - start_time
-            # print(f'{current_time:3.0f}s | {current_it:5} | mean: {mean_objective:.2f} | best:{best_objective:.2f}')
+            # print(f'{current_it:5} | mean: {mean_objective:.2f} | best:{best_objective:.2f}')
             timeLeft = self.reporter.report(mean_objective, best_objective, best_solution)
             if timeLeft < 0:
                 break
-            # if current_it > max_it:
-            #     break
-            # current_it += 1
 
         # Your code here.
         return 0
