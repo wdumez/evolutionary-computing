@@ -305,6 +305,7 @@ class r0758170:
         # Initialization
         self.population = self.init_function(distanceMatrix, self.population_size)
 
+        current_it = 1
         best_solution = self.population[0]
         best_objective = self.fitness_function(best_solution, distanceMatrix)
         while True:
@@ -357,10 +358,11 @@ class r0758170:
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            # print(f'{current_it:5} | mean: {mean_objective:.2f} | best:{best_objective:.2f}')
+            print(f'{current_it:5} | mean: {mean_objective:.2f} | best:{best_objective:.2f}')
             timeLeft = self.reporter.report(mean_objective, best_objective, best_solution)
             if timeLeft < 0:
                 break
+            current_it += 1
 
         # Your code here.
         return 0
