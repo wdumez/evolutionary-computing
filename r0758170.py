@@ -327,6 +327,7 @@ class r0758170:
         # Initialization
         self.population = self.init_function(distance_matrix, self.population_size)
 
+        current_it = 1
         best_solution = self.population[0]
         best_objective = best_solution.fitness_length(distance_matrix)
         while True:
@@ -383,6 +384,7 @@ class r0758170:
             timeLeft = self.reporter.report(mean_objective, best_objective, best_solution.array)
             if timeLeft < 0:
                 break
+            current_it += 1
 
         # Your code here.
         return 0
