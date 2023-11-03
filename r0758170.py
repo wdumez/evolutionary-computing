@@ -29,6 +29,19 @@ class Candidate:
         self.array[key] = value
 
 
+class Parameters:
+    def __init__(self):
+        self.k = 5
+        self.pop_size = 100
+        self.nr_offspring = 20
+        self.mutate_chance = 0.20
+        self.mutate_func = mutate_inversion
+        self.recombine_func = recombine_PMX
+        self.fitness_func = fitness_length
+        self.init_func = init_avoid_inf_heuristic
+        self.select_func = select_k_tournament
+
+
 def mutate_inversion(candidate: Candidate) -> None:
     """Mutate in-place using inversion mutation."""
     size = candidate.size
@@ -301,20 +314,15 @@ def select_top_k(population: list[Candidate], k: int) -> Candidate:
 
 
 # Modify the class name to match your student number.
+def recalculate_fitness(population: list[Candidate], fitness_func, distance_matrix):
+    for candidate in population:
+        candidate.fitness = fitness_func(candidate, distance_matrix)
+
+
 class r0758170:
 
     def __init__(self):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
-        self.k_in_selection = 5
-        self.population = []
-        self.population_size = 100
-        self.nr_offspring = 20  # Must be even.
-        self.mutate_chance = 0.20
-        self.mutation_function = mutate_inversion
-        self.recombine_function = recombine_PMX
-        self.fitness_function = fitness_length
-        self.init_function = init_avoid_inf_heuristic
-        self.select_function = select_k_tournament
 
     # The evolutionary algorithm's main loop
     def optimize(self, filename):
@@ -323,14 +331,15 @@ class r0758170:
         distance_matrix = np.loadtxt(file, delimiter=",")
         file.close()
 
-        # Initialization
-        self.population = self.init_function(distance_matrix, self.population_size)
+        # Get parameters
+        p = Parameters()
 
-        for candidate in self.population:
-            candidate.fitness = self.fitness_function(candidate, distance_matrix)
+        # Initialization
+        population = p.init_func(distance_matrix, p.pop_size)
+        recalculate_fitness(population, p.fitness_func, distance_matrix)
 
         current_it = 1
-        best_solution = self.population[0]
+        best_solution = population[0]
         best_objective = best_solution.fitness
         while True:
             # Selection
@@ -339,8 +348,8 @@ class r0758170:
             # One offspring: need 2 * self.mu selected.
             # Two offspring: need self.mu selected.
             selected = []
-            for i in range(2 * self.nr_offspring):
-                selected.append(self.select_function(self.population, self.k_in_selection))
+            for i in range(2 * p.nr_offspring):
+                selected.append(p.select_func(population, p.k))
 
             # Variation
             # Recombination will produce new offspring using the selected candidates.
@@ -348,33 +357,32 @@ class r0758170:
             it = iter(selected)
             for p1 in it:
                 p2 = next(it)
-                offspring = self.recombine_function(p1, p2)
+                offspring = p.recombine_func(p1, p2)
                 new_offspring.extend(offspring)
-            self.population.extend(new_offspring)
+            population.extend(new_offspring)
 
             # Mutation will happend on the entire population and new offspring, with a certain probability.
-            for candidate in self.population:
-                if rd.random() < self.mutate_chance:
-                    self.mutation_function(candidate)
+            for candidate in population:
+                if rd.random() < p.mutate_chance:
+                    p.mutate_func(candidate)
 
-            for candidate in self.population:
-                candidate.fitness = self.fitness_function(candidate, distance_matrix)
+            recalculate_fitness(population, p.fitness_func, distance_matrix)
 
             # Elimination
             # Lambda + mu elimination: keep only the best candidates.
-            self.population.sort(key=lambda x: x.fitness)
-            self.population = self.population[:self.population_size]
+            population.sort(key=lambda x: x.fitness)
+            population = population[:p.pop_size]
 
             # Recalculate mean and best.
             mean_objective = 0.0
-            current_best_solution = self.population[0]
+            current_best_solution = population[0]
             current_best_objective = current_best_solution.fitness
-            for candidate in self.population:
+            for candidate in population:
                 mean_objective += candidate.fitness
                 if candidate.fitness < current_best_objective:
                     current_best_objective = candidate.fitness
                     current_best_solution = candidate
-            mean_objective = mean_objective / self.population_size
+            mean_objective = mean_objective / p.pop_size
             if current_best_objective < best_objective:
                 best_objective = current_best_objective
                 best_solution = current_best_solution
