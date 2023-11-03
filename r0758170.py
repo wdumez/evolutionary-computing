@@ -30,16 +30,18 @@ class Candidate:
 
 
 class Parameters:
-    def __init__(self):
+    def __init__(self, distance_matrix):
+        self.distance_matrix = distance_matrix
         self.k = 5
         self.pop_size = 100
         self.nr_offspring = 20
         self.mutate_chance = 0.20
         self.mutate_func = mutate_inversion
         self.recombine_func = recombine_PMX
-        self.fitness_func = fitness_length
+        self.fitness_func = path_length
         self.init_func = init_avoid_inf_heuristic
         self.select_func = select_k_tournament
+        self.elim_func = elim_lambda_plus_mu
 
 
 def mutate_inversion(candidate: Candidate) -> None:
@@ -75,10 +77,11 @@ def mutate_insert(candidate: Candidate) -> None:
     raise NotImplementedError
 
 
-def fitness_length(candidate: Candidate, distance_matrix: NDArray) -> float:
+def path_length(candidate: Candidate, p: Parameters) -> float:
     """Return the length of the path."""
     result = 0.0
     size = candidate.size
+    distance_matrix = p.distance_matrix
     for i in range(size - 1):
         # Order is important for the distance matrix.
         result += distance_matrix[candidate[i]][candidate[i + 1]]
@@ -258,22 +261,22 @@ def index_of(candidate: Candidate, value: int) -> int:
     return int(np.where(candidate.array == value)[0][0])
 
 
-def init_monte_carlo(distance_matrix: np.ndarray, population_size: int) -> [Candidate]:
+def init_monte_carlo(p: Parameters) -> [Candidate]:
     """Initializes the population at random."""
     population = []
-    sample = list(range(len(distance_matrix)))
-    for i in range(population_size):
+    sample = list(range(len(p.distance_matrix)))
+    for i in range(p.pop_size):
         array = np.array(sample)
         np.random.shuffle(array)
         population.append(array)
     return population
 
 
-def init_avoid_inf_heuristic(distance_matrix: np.ndarray, population_size: int) -> list[Candidate]:
+def init_avoid_inf_heuristic(p: Parameters) -> list[Candidate]:
     """Initializes the population using a heuristic which avoids infinite values."""
     population = []
-    for _ in range(population_size):
-        choices = list(range(len(distance_matrix)))
+    for _ in range(p.pop_size):
+        choices = list(range(len(p.distance_matrix)))
         candidate = []
         while len(choices) != 0:
             if len(candidate) == 0:  # The first element is picked at random.
@@ -281,14 +284,14 @@ def init_avoid_inf_heuristic(distance_matrix: np.ndarray, population_size: int) 
                 choices.remove(choice)
                 candidate.append(choice)
                 continue
-            possible_next = [x for x in choices if distance_matrix[candidate[-1]][x] != math.inf]
+            possible_next = [x for x in choices if p.distance_matrix[candidate[-1]][x] != math.inf]
             if len(possible_next) == 0:
                 # Pick the first choice because all next choices lead to inf anyway.
                 next_element = choices[0]
             else:
                 # Pick the best choice with a small probability, random otherwise.
                 if rd.random() < 0.05:
-                    next_element = min(possible_next, key=lambda x: distance_matrix[candidate[-1]][x])
+                    next_element = min(possible_next, key=lambda x: p.distance_matrix[candidate[-1]][x])
                 else:
                     next_element = rd.choice(possible_next)
             candidate.append(next_element)
@@ -297,10 +300,10 @@ def init_avoid_inf_heuristic(distance_matrix: np.ndarray, population_size: int) 
     return population
 
 
-def select_k_tournament(population: list[Candidate], k: int) -> Candidate:
+def select_k_tournament(population: list[Candidate], p: Parameters) -> Candidate:
     """Performs a k-tournament on the population. Returns the best candidate among k random samples."""
     selected = []
-    for i in range(k):
+    for i in range(p.k):
         selected.append(rd.choice(population))
     return min(selected, key=lambda x: x.fitness)
 
@@ -313,10 +316,17 @@ def select_top_k(population: list[Candidate], k: int) -> Candidate:
     return rd.choice(population[:k])
 
 
+def elim_lambda_plus_mu(population: list[Candidate], offspring: list[Candidate], p: Parameters) -> list[Candidate]:
+    """Performs (lambda+mu)-elimination. Returns the new population."""
+    population.extend(offspring)
+    population.sort(key=lambda x: p.fitness_func(x, p))
+    return population[:p.pop_size]
+
+
 # Modify the class name to match your student number.
-def recalculate_fitness(population: list[Candidate], fitness_func, distance_matrix):
+def recalculate_fitness(population: list[Candidate], p: Parameters):
     for candidate in population:
-        candidate.fitness = fitness_func(candidate, distance_matrix)
+        candidate.fitness = p.fitness_func(candidate, p)
 
 
 class r0758170:
@@ -331,49 +341,38 @@ class r0758170:
         distance_matrix = np.loadtxt(file, delimiter=",")
         file.close()
 
-        # Get parameters
-        p = Parameters()
+        p = Parameters(distance_matrix)
 
         # Initialization
-        population = p.init_func(distance_matrix, p.pop_size)
-        recalculate_fitness(population, p.fitness_func, distance_matrix)
+        population = p.init_func(p)
+        recalculate_fitness(population, p)
 
         current_it = 1
         best_solution = population[0]
         best_objective = best_solution.fitness
         while True:
-            # Selection
-            # Perform a certain number of k-tournaments; this depends on self.mu
-            # and whether the recombination operator returns one or two offspring.
-            # One offspring: need 2 * self.mu selected.
-            # Two offspring: need self.mu selected.
-            selected = []
-            for i in range(2 * p.nr_offspring):
-                selected.append(p.select_func(population, p.k))
+            # Selection and recombination
+            offspring = []
+            for i in range(p.nr_offspring):
+                p1 = p.select_func(population, p)
+                p2 = p.select_func(population, p)
+                offspring.extend(p.recombine_func(p1, p2))
 
-            # Variation
-            # Recombination will produce new offspring using the selected candidates.
-            new_offspring = []
-            it = iter(selected)
-            for p1 in it:
-                p2 = next(it)
-                offspring = p.recombine_func(p1, p2)
-                new_offspring.extend(offspring)
-            population.extend(new_offspring)
-
-            # Mutation will happend on the entire population and new offspring, with a certain probability.
+            # Mutation
+            for candidate in offspring:
+                if rd.random() < p.mutate_chance:
+                    p.mutate_func(candidate)
             for candidate in population:
                 if rd.random() < p.mutate_chance:
                     p.mutate_func(candidate)
 
-            recalculate_fitness(population, p.fitness_func, distance_matrix)
+            recalculate_fitness(population, p)
+            recalculate_fitness(offspring, p)
 
             # Elimination
-            # Lambda + mu elimination: keep only the best candidates.
-            population.sort(key=lambda x: x.fitness)
-            population = population[:p.pop_size]
+            population = p.elim_func(population, offspring, p)
 
-            # Recalculate mean and best.
+            # Recalculate mean and best
             mean_objective = 0.0
             current_best_solution = population[0]
             current_best_objective = current_best_solution.fitness
@@ -393,10 +392,9 @@ class r0758170:
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
             print(f'{current_it:6} | mean: {mean_objective:10.2f} | best:{best_objective:10.2f}')
-            timeLeft = self.reporter.report(mean_objective, best_objective, best_solution)
+            timeLeft = self.reporter.report(mean_objective, best_objective, best_solution.array)
             if timeLeft < 0:
                 break
             current_it += 1
 
-        # Your code here.
         return 0
