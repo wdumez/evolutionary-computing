@@ -284,22 +284,18 @@ def init_avoid_inf_heuristic(distance_matrix: np.ndarray, population_size: int) 
     return population
 
 
-def select_k_tournament(population: list[Candidate], k: int,
-                        fitness_function, distance_matrix: np.ndarray) -> Candidate:
+def select_k_tournament(population: list[Candidate], k: int) -> Candidate:
     """Performs a k-tournament on the population. Returns the best candidate among k random samples."""
     selected = []
     for i in range(k):
         selected.append(rd.choice(population))
-    return min(selected, key=lambda x: fitness_function(x, distance_matrix))
+    return min(selected, key=lambda x: x.fitness)
 
 
-def select_top_k(population: list[Candidate], k: int,
-                 fitness_function, distance_matrix: np.ndarray) -> Candidate:
+def select_top_k(population: list[Candidate], k: int) -> Candidate:
     """Performs top-k selection on the population. Returns a random candidate among the k best candidates.
     Assumes that population is already sorted from best to worst; this is the case
     when using (lambda+mu) elimination.
-    This function does not actually use the fitness function and distance matrix,
-    but takes them as arguments for compatibility with other selection functions.
     """
     return rd.choice(population[:k])
 
@@ -315,7 +311,7 @@ class r0758170:
         self.nr_offspring = 100  # Must be even.
         self.mutate_chance = 0.05
         self.mutation_function = mutate_inversion
-        self.recombine_function = recombine_PMX
+        self.recombine_function = recombine_edge_crossover
         self.fitness_function = fitness_length
         self.init_function = init_avoid_inf_heuristic
         self.select_function = select_k_tournament
@@ -330,9 +326,12 @@ class r0758170:
         # Initialization
         self.population = self.init_function(distance_matrix, self.population_size)
 
+        for candidate in self.population:
+            candidate.fitness = self.fitness_function(candidate, distance_matrix)
+
         current_it = 1
         best_solution = self.population[0]
-        best_objective = self.fitness_function(best_solution, distance_matrix)
+        best_objective = best_solution.fitness
         while True:
             # Selection
             # Perform a certain number of k-tournaments; this depends on self.mu
@@ -341,9 +340,7 @@ class r0758170:
             # Two offspring: need self.mu selected.
             selected = []
             for i in range(2 * self.nr_offspring):
-                selected.append(
-                    self.select_function(
-                        self.population, self.k_in_selection, self.fitness_function, distance_matrix))
+                selected.append(self.select_function(self.population, self.k_in_selection))
 
             # Variation
             # Recombination will produce new offspring using the selected candidates.
@@ -360,20 +357,22 @@ class r0758170:
                 if rd.random() < self.mutate_chance:
                     self.mutation_function(candidate)
 
+            for candidate in self.population:
+                candidate.fitness = self.fitness_function(candidate, distance_matrix)
+
             # Elimination
             # Lambda + mu elimination: keep only the best candidates.
-            self.population.sort(key=lambda x: self.fitness_function(x, distance_matrix))
+            self.population.sort(key=lambda x: x.fitness)
             self.population = self.population[:self.population_size]
 
             # Recalculate mean and best.
             mean_objective = 0.0
             current_best_solution = self.population[0]
-            current_best_objective = self.fitness_function(current_best_solution, distance_matrix)
+            current_best_objective = current_best_solution.fitness
             for candidate in self.population:
-                candidate_fitness = self.fitness_function(candidate, distance_matrix)
-                mean_objective += candidate_fitness
-                if candidate_fitness < current_best_objective:
-                    current_best_objective = candidate_fitness
+                mean_objective += candidate.fitness
+                if candidate.fitness < current_best_objective:
+                    current_best_objective = candidate.fitness
                     current_best_solution = candidate
             mean_objective = mean_objective / self.population_size
             if current_best_objective < best_objective:
