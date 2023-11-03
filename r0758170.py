@@ -308,10 +308,10 @@ class r0758170:
         self.k_in_selection = 5
         self.population = []
         self.population_size = 100
-        self.nr_offspring = 100  # Must be even.
-        self.mutate_chance = 0.05
+        self.nr_offspring = 20  # Must be even.
+        self.mutate_chance = 0.20
         self.mutation_function = mutate_inversion
-        self.recombine_function = recombine_edge_crossover
+        self.recombine_function = recombine_PMX
         self.fitness_function = fitness_length
         self.init_function = init_avoid_inf_heuristic
         self.select_function = select_k_tournament
