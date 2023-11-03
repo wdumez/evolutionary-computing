@@ -2,7 +2,6 @@ import random as rd
 
 import math
 import numpy as np
-from numpy.typing import NDArray
 
 import Reporter
 
@@ -48,7 +47,7 @@ def mutate_inversion(candidate: Candidate) -> None:
     """Mutate in-place using inversion mutation."""
     size = candidate.size
     first_pos = rd.randrange(0, size - 1)
-    second_pos = rd.randrange(first_pos, size)
+    second_pos = rd.randrange(first_pos + 1, size)
     candidate[first_pos:second_pos + 1] = np.flip(candidate[first_pos:second_pos + 1])
 
 
@@ -68,13 +67,19 @@ def mutate_scramble(candidate: Candidate) -> None:
     """Mutate in-place using scramble mutation."""
     size = candidate.size
     first_pos = rd.randrange(0, size - 1)
-    second_pos = rd.randrange(first_pos, size)
+    second_pos = rd.randrange(first_pos + 1, size)
     np.random.shuffle(candidate[first_pos:second_pos + 1])
 
 
 def mutate_insert(candidate: Candidate) -> None:
     """Mutate in-place using insert mutation."""
-    raise NotImplementedError
+    size = candidate.size
+    first_pos = rd.randrange(0, size - 1)
+    second_pos = rd.randrange(first_pos + 1, size)
+    print(first_pos, second_pos)
+    tmp = candidate[second_pos]
+    candidate[first_pos + 2:second_pos + 1] = candidate[first_pos + 1:second_pos]
+    candidate[first_pos + 1] = tmp
 
 
 def path_length(candidate: Candidate, p: Parameters) -> float:
