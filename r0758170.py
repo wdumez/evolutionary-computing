@@ -1,5 +1,4 @@
 import random as rd
-from typing import TypeAlias
 
 import math
 import numpy as np
@@ -7,12 +6,27 @@ from numpy.typing import NDArray
 
 import Reporter
 
-# SEED = 2
-# rd.seed(SEED)
-# np.random.seed(SEED)
 
-# Type aliases.
-Candidate: TypeAlias = NDArray[int]
+class Candidate:
+    def __init__(self, array):
+        self.array = array
+        self.size = array.size
+        self.fitness = 0
+
+    def __repr__(self):
+        return str(self.array)
+
+    def __len__(self):
+        return len(self.array)
+
+    def __iter__(self):
+        return iter(self.array)
+
+    def __getitem__(self, item):
+        return self.array[item]
+
+    def __setitem__(self, key, value):
+        self.array[key] = value
 
 
 def mutate_inversion(candidate: Candidate) -> None:
@@ -77,7 +91,7 @@ def recombine_cycle_crossover(parent1: Candidate, parent2: Candidate) -> list[Ca
             for idx in cycle:
                 offspring1[idx] = parent2[idx]
                 offspring2[idx] = parent1[idx]
-    return [offspring1, offspring2]
+    return [Candidate(offspring1), Candidate(offspring2)]
 
 
 def find_cycles(parent1: Candidate, parent2: Candidate) -> list[list[int]]:
@@ -125,7 +139,7 @@ def recombine_edge_crossover(parent1: Candidate, parent2: Candidate) -> list[Can
                 result.append(current_element)
                 remaining.remove(current_element)
                 remove_references(adj_table, current_element)
-    return [np.array(result)]
+    return [Candidate(np.array(result))]
 
 
 def pick_next_element(adj_table: dict[int, list[tuple[int, bool]]], current_element: int) -> int:
@@ -214,7 +228,7 @@ def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
         for i in range(size):
             if offspring[i] == -1:
                 offspring[i] = p2[i]
-        all_offspring.append(offspring)
+        all_offspring.append(Candidate(offspring))
     return all_offspring
 
 
@@ -223,12 +237,12 @@ def recombine_order_crossover(parent1: Candidate, parent2: Candidate) -> list[Ca
     raise NotImplementedError
 
 
-def index_of(array: Candidate, value: int) -> int:
-    """Return the first index at which value occurs in array.
+def index_of(candidate: Candidate, value: int) -> int:
+    """Return the first index at which value occurs in candidate.
     This is just a convenience function for numpy arrays, which behaves like list.index(value).
     This also works straight on Candidate objects.
     """
-    return int(np.where(array == value)[0][0])
+    return int(np.where(candidate.array == value)[0][0])
 
 
 def init_monte_carlo(distance_matrix: np.ndarray, population_size: int) -> [Candidate]:
@@ -266,7 +280,7 @@ def init_avoid_inf_heuristic(distance_matrix: np.ndarray, population_size: int) 
                     next_element = rd.choice(possible_next)
             candidate.append(next_element)
             choices.remove(next_element)
-        population.append(np.array(candidate))
+        population.append(Candidate(np.array(candidate)))
     return population
 
 
