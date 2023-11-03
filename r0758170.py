@@ -135,6 +135,7 @@ def pick_next_element(adj_table: dict[int, list[tuple[int, bool]]], current_elem
     lst = adj_table[current_element]
     if len(lst) == 0:
         raise NoNextElementException
+    # TODO can be sped up with bin. search?
     for x, is_common in lst:
         if is_common:
             return x
@@ -156,6 +157,7 @@ def remove_references(adj_table: dict[int, list[tuple[int, bool]]], value: int):
     for x, lst in adj_table.items():
         if x == value:
             continue  # We can skip this case because value cannot be adjacent to itself.
+        # TODO can be sped up with bin. search?
         for y, is_common in lst:
             if value == y:
                 lst.remove((y, is_common))
@@ -243,7 +245,7 @@ def init_monte_carlo(distance_matrix: np.ndarray, population_size: int) -> [Cand
 def init_avoid_inf_heuristic(distance_matrix: np.ndarray, population_size: int) -> list[Candidate]:
     """Initializes the population using a heuristic which avoids infinite values."""
     population = []
-    for i in range(population_size):
+    for _ in range(population_size):
         choices = list(range(len(distance_matrix)))
         candidate = []
         while len(choices) != 0:
@@ -260,6 +262,42 @@ def init_avoid_inf_heuristic(distance_matrix: np.ndarray, population_size: int) 
                 # This leads to a dead end, backtrack the last choice and try again.
                 choices.append(candidate[-1])
                 candidate.remove(candidate[-1])
+            else:
+                # The path can be extended, pick a next element with preference for the greedy choice.
+                if rd.random() < 0.15:
+                    choice = min(possible_next, key=lambda x: distance_matrix[candidate[-1]][x])
+                else:
+                    choice = rd.choice(possible_next)
+                candidate.append(choice)
+                choices.remove(choice)
+        population.append(np.array(candidate))
+    return population
+
+
+def init_avoid_inf_fast_heuristic(distance_matrix: np.ndarray, population_size: int) -> list[Candidate]:
+    """Initializes the population using a heuristic which avoids infinite values.
+    This variant is much faster, but does not always produce good solutions.
+    """
+    population = []
+    for _ in range(population_size):
+        choices = list(range(len(distance_matrix)))
+        candidate = []
+        while len(choices) != 0:
+            if len(candidate) == 0:  # The first element is picked at random.
+                choice = rd.choice(choices)
+                candidate.append(choice)
+                choices.remove(choice)
+                continue
+            possible_next = []
+            for _ in range(10):  # 100 samples
+                x = rd.choice(choices)
+                if x not in candidate and distance_matrix[candidate[-1]][x] != math.inf:
+                    possible_next.append(x)
+            if len(possible_next) == 0:
+                # There was no good next choice, pick random.
+                choice = rd.choice(choices)
+                candidate.append(choice)
+                choices.remove(choice)
             else:
                 # The path can be extended, pick a next element with preference for the greedy choice.
                 if rd.random() < 0.15:
@@ -303,9 +341,9 @@ class r0758170:
         self.nr_offspring = 100  # Must be even.
         self.mutate_chance = 0.05
         self.mutation_function = mutate_inversion
-        self.recombine_function = recombine_edge_crossover
+        self.recombine_function = recombine_PMX
         self.fitness_function = fitness_length
-        self.init_function = init_monte_carlo
+        self.init_function = init_avoid_inf_heuristic
         self.select_function = select_k_tournament
 
     # The evolutionary algorithm's main loop
@@ -373,7 +411,7 @@ class r0758170:
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            print(f'{current_it:6} | mean: {mean_objective:7.2f} | best:{best_objective:7.2f}')
+            print(f'{current_it:6} | mean: {mean_objective:10.2f} | best:{best_objective:10.2f}')
             timeLeft = self.reporter.report(mean_objective, best_objective, best_solution)
             if timeLeft < 0:
                 break
