@@ -33,10 +33,10 @@ class Parameters:
         self.distance_matrix = distance_matrix
         self.k = 5
         self.pop_size = 100
-        self.nr_offspring = 50
-        self.mutate_chance = 0.20
+        self.mu = 20
+        self.mutate_chance = 0.05
         self.mutate_func = mutate_inversion
-        self.recombine_func = recombine_order_crossover
+        self.recombine_func = recombine_PMX
         self.fitness_func = path_length
         self.init_func = init_avoid_inf_heuristic
         self.select_func = select_k_tournament
@@ -348,6 +348,23 @@ def elim_lambda_plus_mu(population: list[Candidate], offspring: list[Candidate],
     return population[:p.pop_size]
 
 
+def elim_lambda_comma_mu(population: list[Candidate], offspring: list[Candidate], p: Parameters) -> list[Candidate]:
+    """Performs (lambda,mu)-elimination. Returns the new population."""
+    offspring.sort(key=lambda x: p.fitness_func(x, p))
+    return offspring[:p.pop_size]
+
+
+def elim_age_based(population: list[Candidate], offspring: list[Candidate], p: Parameters) -> list[Candidate]:
+    """Performs age-based elimination. Returns the new population."""
+    return offspring
+
+
+def elim_k_tournament(population: list[Candidate], offspring: list[Candidate], p: Parameters) -> list[Candidate]:
+    """Performs k-tournament elimination. Returns the new population."""
+    population.extend(offspring)
+    return [select_k_tournament(population, p) for _ in range(p.pop_size)]
+
+
 # Modify the class name to match your student number.
 def recalculate_fitness(population: list[Candidate], p: Parameters):
     for candidate in population:
@@ -378,7 +395,7 @@ class r0758170:
         while True:
             # Selection and recombination
             offspring = []
-            for i in range(p.nr_offspring):
+            for i in range(p.mu):
                 p1 = p.select_func(population, p)
                 p2 = p.select_func(population, p)
                 offspring.extend(p.recombine_func(p1, p2))
@@ -387,8 +404,10 @@ class r0758170:
             for candidate in offspring:
                 if rd.random() < p.mutate_chance:
                     p.mutate_func(candidate)
+                    p.mutate_func(candidate)
             for candidate in population:
                 if rd.random() < p.mutate_chance:
+                    p.mutate_func(candidate)
                     p.mutate_func(candidate)
 
             recalculate_fitness(population, p)

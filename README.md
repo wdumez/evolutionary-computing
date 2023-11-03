@@ -22,7 +22,7 @@
 ```python
 self.k = 5
 self.pop_size = 100
-self.nr_offspring = 20  # Must be even.
+self.mu = 20  # Must be even.
 self.mutate_chance = 0.20
 self.mutation_func = mutate_inversion
 self.recombine_func = recombine_PMX
@@ -37,7 +37,7 @@ self.elim_func = elim_lambda_plus_mu
 ```python
 self.k = 5
 self.pop_size = 100
-self.nr_offspring = 50
+self.mu = 50
 self.mutate_chance = 0.20
 self.mutate_func = mutate_inversion
 self.recombine_func = recombine_order_crossover
