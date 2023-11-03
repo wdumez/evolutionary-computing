@@ -33,10 +33,10 @@ class Parameters:
         self.distance_matrix = distance_matrix
         self.k = 5
         self.pop_size = 100
-        self.nr_offspring = 20
+        self.nr_offspring = 50
         self.mutate_chance = 0.20
         self.mutate_func = mutate_inversion
-        self.recombine_func = recombine_PMX
+        self.recombine_func = recombine_order_crossover
         self.fitness_func = path_length
         self.init_func = init_avoid_inf_heuristic
         self.select_func = select_k_tournament
@@ -76,7 +76,6 @@ def mutate_insert(candidate: Candidate) -> None:
     size = candidate.size
     first_pos = rd.randrange(0, size - 1)
     second_pos = rd.randrange(first_pos + 1, size)
-    print(first_pos, second_pos)
     tmp = candidate[second_pos]
     candidate[first_pos + 2:second_pos + 1] = candidate[first_pos + 1:second_pos]
     candidate[first_pos + 1] = tmp
@@ -226,10 +225,10 @@ def get_adj(x: int, candidate: Candidate) -> list[int]:
 
 def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
     """Use two parent candidates to produce one offspring using partially mapped crossover."""
-    size = len(parent1)
+    size = parent1.size
     all_offspring = []
-    first_pos = rd.randint(0, size - 2)
-    second_pos = rd.randint(first_pos, size - 1)
+    first_pos = rd.randrange(0, size - 1)
+    second_pos = rd.randrange(first_pos, size)
     for p1, p2 in [(parent1, parent2), (parent2, parent1)]:
         offspring = np.zeros_like(p1)
         # We must initialize offspring with -1's, to identify whether a spot is not yet filled.
@@ -255,7 +254,28 @@ def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
 
 def recombine_order_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
     """Use two parent candidates to produce one offspring using order crossover."""
-    raise NotImplementedError
+    size = parent1.size
+    all_offspring = []
+    # first_pos = rd.randrange(0, size - 1)
+    # second_pos = rd.randrange(first_pos, size)
+    first_pos, second_pos = (3, 6)
+    for p1, p2 in [(parent1, parent2), (parent2, parent1)]:
+        offspring = np.zeros_like(p1)
+        # We must initialize offspring with -1's, to identify whether a spot is not yet filled.
+        for i in range(size):
+            offspring[i] = -1
+        offspring[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
+
+        idx_p2 = second_pos + 1
+        idx_off = idx_p2
+        while idx_off != first_pos:
+            if p2[idx_p2] not in offspring[first_pos:second_pos + 1]:
+                offspring[idx_off] = p2[idx_p2]
+                idx_off = 0 if idx_off + 1 >= size else idx_off + 1
+            idx_p2 = 0 if idx_p2 + 1 >= size else idx_p2 + 1
+
+        all_offspring.append(Candidate(offspring))
+    return all_offspring
 
 
 def index_of(candidate: Candidate, value: int) -> int:

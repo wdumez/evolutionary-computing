@@ -8,6 +8,7 @@
 - Avoid_inf_heuristic gets really slow with large problem sizes.
 - Monte Carlo initialization is awful compared to the heuristic.
 - Saving the fitness and reusing the results makes for a huge speedup.
+- Inversion- and scramble mutation seem to work best.
 
 ## Things I tried
 
@@ -18,19 +19,30 @@
 
 ### `9276 | mean:   39677.87 | best:  39677.87`
 
-with:
-
 ```python
-self.k_in_selection = 5
-self.population = []
-self.population_size = 100
+self.k = 5
+self.pop_size = 100
 self.nr_offspring = 20  # Must be even.
 self.mutate_chance = 0.20
-self.mutation_function = mutate_inversion
-self.recombine_function = recombine_PMX
-self.fitness_function = fitness_length
-self.init_function = init_avoid_inf_heuristic
-self.select_function = select_k_tournament
+self.mutation_func = mutate_inversion
+self.recombine_func = recombine_PMX
+self.fitness_func = path_length
+self.init_func = init_avoid_inf_heuristic
+self.select_func = select_k_tournament
+self.elim_func = elim_lambda_plus_mu
 ```
 
-Testing
+### `2162 | mean:   40527.27 | best:  40527.27`
+
+```python
+self.k = 5
+self.pop_size = 100
+self.nr_offspring = 50
+self.mutate_chance = 0.20
+self.mutate_func = mutate_inversion
+self.recombine_func = recombine_order_crossover
+self.fitness_func = path_length
+self.init_func = init_avoid_inf_heuristic
+self.select_func = select_k_tournament
+self.elim_func = elim_lambda_plus_mu
+```

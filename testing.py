@@ -1,6 +1,6 @@
 import numpy as np
 
-from r0758170 import recombine_cycle_crossover, Candidate, mutate_insert
+from r0758170 import recombine_order_crossover, Candidate, mutate_insert
 
 
 def create_random_candidate(size: int):
@@ -15,6 +15,5 @@ b = np.array([9, 3, 7, 8, 2, 6, 5, 1, 4])
 a = Candidate(a)
 b = Candidate(b)
 
-print(a)
-mutate_insert(a)
-print(a)
+c = recombine_order_crossover(a, b)
+print(c[0])
