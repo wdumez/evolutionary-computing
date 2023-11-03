@@ -251,61 +251,21 @@ def init_avoid_inf_heuristic(distance_matrix: np.ndarray, population_size: int) 
         while len(choices) != 0:
             if len(candidate) == 0:  # The first element is picked at random.
                 choice = rd.choice(choices)
-                candidate.append(choice)
                 choices.remove(choice)
+                candidate.append(choice)
                 continue
-            possible_next = [
-                x for x in choices
-                if x not in candidate and distance_matrix[candidate[-1]][x] != math.inf
-            ]
+            possible_next = [x for x in choices if distance_matrix[candidate[-1]][x] != math.inf]
             if len(possible_next) == 0:
-                # This leads to a dead end, backtrack the last choice and try again.
-                choices.append(candidate[-1])
-                candidate.remove(candidate[-1])
+                # Pick the first choice because all next choices lead to inf anyway.
+                next_element = choices[0]
             else:
-                # The path can be extended, pick a next element with preference for the greedy choice.
-                if rd.random() < 0.15:
-                    choice = min(possible_next, key=lambda x: distance_matrix[candidate[-1]][x])
+                # Pick the best choice with a small probability, random otherwise.
+                if rd.random() < 0.05:
+                    next_element = min(possible_next, key=lambda x: distance_matrix[candidate[-1]][x])
                 else:
-                    choice = rd.choice(possible_next)
-                candidate.append(choice)
-                choices.remove(choice)
-        population.append(np.array(candidate))
-    return population
-
-
-def init_avoid_inf_fast_heuristic(distance_matrix: np.ndarray, population_size: int) -> list[Candidate]:
-    """Initializes the population using a heuristic which avoids infinite values.
-    This variant is much faster, but does not always produce good solutions.
-    """
-    population = []
-    for _ in range(population_size):
-        choices = list(range(len(distance_matrix)))
-        candidate = []
-        while len(choices) != 0:
-            if len(candidate) == 0:  # The first element is picked at random.
-                choice = rd.choice(choices)
-                candidate.append(choice)
-                choices.remove(choice)
-                continue
-            possible_next = []
-            for _ in range(10):  # 100 samples
-                x = rd.choice(choices)
-                if x not in candidate and distance_matrix[candidate[-1]][x] != math.inf:
-                    possible_next.append(x)
-            if len(possible_next) == 0:
-                # There was no good next choice, pick random.
-                choice = rd.choice(choices)
-                candidate.append(choice)
-                choices.remove(choice)
-            else:
-                # The path can be extended, pick a next element with preference for the greedy choice.
-                if rd.random() < 0.15:
-                    choice = min(possible_next, key=lambda x: distance_matrix[candidate[-1]][x])
-                else:
-                    choice = rd.choice(possible_next)
-                candidate.append(choice)
-                choices.remove(choice)
+                    next_element = rd.choice(possible_next)
+            candidate.append(next_element)
+            choices.remove(next_element)
         population.append(np.array(candidate))
     return population
 
