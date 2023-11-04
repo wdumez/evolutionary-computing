@@ -1,6 +1,5 @@
 import numpy as np
-
-from r0758170 import recombine_order_crossover, Candidate, mutate_insert
+from r0758170 import *
 
 
 def create_random_candidate(size: int):
@@ -9,11 +8,5 @@ def create_random_candidate(size: int):
     return array
 
 
-a = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9])
-b = np.array([9, 3, 7, 8, 2, 6, 5, 1, 4])
-
-a = Candidate(a)
-b = Candidate(b)
-
-c = recombine_order_crossover(a, b)
-print(c[0])
+with open('./tour50.csv') as file:
+    distance_matrix = np.loadtxt(file, delimiter=",")

@@ -6,41 +6,13 @@ import numpy as np
 import Reporter
 
 
-class Candidate:
-    def __init__(self, array):
-        self.array = array
-        self.size = array.size
-        self.fitness = 0
-
-    def __repr__(self):
-        return str(self.array)
-
-    def __len__(self):
-        return len(self.array)
-
-    def __iter__(self):
-        return iter(self.array)
-
-    def __getitem__(self, item):
-        return self.array[item]
-
-    def __setitem__(self, key, value):
-        self.array[key] = value
-
-    def index(self, value) -> int:
-        """Return the first index at which value occurs in candidate.
-        This is just a convenience function for Candidate, which behaves like list.index(value).
-        """
-        return int(np.where(self.array == value)[0][0])
-
-
 class Parameters:
     def __init__(self, distance_matrix):
         self.distance_matrix = distance_matrix
         self.k = 5
-        self.pop_size = 100
-        self.mu = 20
-        self.mutate_chance = 0.05
+        self.pop_size = 10
+        self.offspring_size = 4
+        self.mutate_chance = 0.20
         self.mutate_func = mutate_inversion
         self.recombine_func = recombine_PMX
         self.fitness_func = path_length
@@ -49,65 +21,54 @@ class Parameters:
         self.elim_func = elim_lambda_plus_mu
 
 
-def mutate_inversion(candidate: Candidate) -> None:
+def mutate_inversion(candidate) -> None:
     """Mutate in-place using inversion mutation."""
-    size = candidate.size
-    first_pos = rd.randrange(0, size - 1)
-    second_pos = rd.randrange(first_pos + 1, size)
+    first_pos = rd.randrange(0, candidate.size - 1)
+    second_pos = rd.randrange(first_pos + 1, candidate.size)
     candidate[first_pos:second_pos + 1] = np.flip(candidate[first_pos:second_pos + 1])
 
 
-def mutate_swap(candidate: Candidate) -> None:
+def mutate_swap(candidate) -> None:
     """Mutate in-place using swap mutation."""
-    size = candidate.size
-    first_pos = rd.randrange(0, size)
+    first_pos = rd.randrange(0, candidate.size)
     second_pos = first_pos
     while second_pos == first_pos:
-        second_pos = rd.randrange(0, size)
+        second_pos = rd.randrange(0, candidate.size)
     tmp = candidate[first_pos]
     candidate[first_pos] = candidate[second_pos]
     candidate[second_pos] = tmp
 
 
-def mutate_scramble(candidate: Candidate) -> None:
+def mutate_scramble(candidate) -> None:
     """Mutate in-place using scramble mutation."""
-    size = candidate.size
-    first_pos = rd.randrange(0, size - 1)
-    second_pos = rd.randrange(first_pos + 1, size)
+    first_pos = rd.randrange(0, candidate.size - 1)
+    second_pos = rd.randrange(first_pos + 1, candidate.size)
     np.random.shuffle(candidate[first_pos:second_pos + 1])
 
 
-def mutate_insert(candidate: Candidate) -> None:
+def mutate_insert(candidate) -> None:
     """Mutate in-place using insert mutation."""
-    size = candidate.size
-    first_pos = rd.randrange(0, size - 1)
-    second_pos = rd.randrange(first_pos + 1, size)
+    first_pos = rd.randrange(0, candidate.size - 1)
+    second_pos = rd.randrange(first_pos + 1, candidate.size)
     tmp = candidate[second_pos]
     candidate[first_pos + 2:second_pos + 1] = candidate[first_pos + 1:second_pos]
     candidate[first_pos + 1] = tmp
 
 
-def path_length(candidate: Candidate, p: Parameters) -> float:
+def path_length(candidate, p: Parameters) -> float:
     """Return the length of the path."""
     result = 0.0
-    size = candidate.size
-    distance_matrix = p.distance_matrix
-    for i in range(size - 1):
+    for i in range(candidate.size - 1):
         # Order is important for the distance matrix.
-        result += distance_matrix[candidate[i]][candidate[i + 1]]
-    result += distance_matrix[candidate[size - 1]][candidate[0]]
+        result += p.distance_matrix[candidate[i]][candidate[i + 1]]
+    result += p.distance_matrix[candidate[candidate.size - 1]][candidate[0]]
     return result
 
 
-class NoNextElementException(Exception):
-    """Exception used in edge crossover recombination."""
-
-
-def recombine_cycle_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
+def recombine_cycle_crossover(parent1, parent2, *offspring) -> None:
     """Use two parent candidates to produce two offspring using cycle crossover."""
     cycles = find_cycles(parent1, parent2)
-    offspring1 = np.zeros_like(parent1)
-    offspring2 = np.zeros_like(parent2)
+    offspring1, offspring2 = offspring
     for i, cycle in enumerate(cycles):
         if i % 2 == 0:
             for idx in cycle:
@@ -117,10 +78,9 @@ def recombine_cycle_crossover(parent1: Candidate, parent2: Candidate) -> list[Ca
             for idx in cycle:
                 offspring1[idx] = parent2[idx]
                 offspring2[idx] = parent1[idx]
-    return [Candidate(offspring1), Candidate(offspring2)]
 
 
-def find_cycles(parent1: Candidate, parent2: Candidate) -> list[list[int]]:
+def find_cycles(parent1, parent2) -> list[list[int]]:
     """Returns all cycles of the parents using indices."""
     unused_idx = list(range(len(parent1)))
     cycles = []
@@ -130,8 +90,8 @@ def find_cycles(parent1: Candidate, parent2: Candidate) -> list[list[int]]:
         unused_idx.remove(current_idx)
         cycle = [current_idx]
         while True:
-            allele_p2 = int(parent2[current_idx])
-            current_idx = parent1.index(allele_p2)
+            value_p2 = parent2[current_idx]
+            current_idx = index(parent1, value_p2)
             if current_idx == start_idx:
                 break
             unused_idx.remove(current_idx)
@@ -140,35 +100,43 @@ def find_cycles(parent1: Candidate, parent2: Candidate) -> list[list[int]]:
     return cycles
 
 
-def recombine_edge_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
+class NoNextElementException(Exception):
+    """Exception used in edge crossover recombination."""
+
+
+def recombine_edge_crossover(parent1, parent2, offspring) -> None:
     """Use two parent candidates to produce one offspring using edge crossover."""
     adj_table = create_adj_table(parent1, parent2)
-    remaining = [x for x in parent1]
+    remaining = list(range(len(parent1)))
     current_element = rd.choice(remaining)
-    result = [current_element]
+    offspring[0] = current_element
+    idx_off = 1
     remaining.remove(current_element)
     remove_references(adj_table, current_element)
     while len(remaining) != 0:
         try:
             current_element = pick_next_element(adj_table, current_element)
-            result.append(current_element)
+            offspring[idx_off] = current_element
+            idx_off += 1
             remaining.remove(current_element)
             remove_references(adj_table, current_element)
         except NoNextElementException:
             try:
-                next_element = pick_next_element(adj_table, result[0])
-                result.insert(0, next_element)
+                next_element = pick_next_element(adj_table, offspring[0])
+                offspring = np.roll(offspring, shift=1)
+                offspring[0] = next_element
+                idx_off += 1
                 remaining.remove(next_element)
                 remove_references(adj_table, next_element)
             except NoNextElementException:
                 current_element = rd.choice(remaining)
-                result.append(current_element)
+                offspring[idx_off] = current_element
+                idx_off += 1
                 remaining.remove(current_element)
                 remove_references(adj_table, current_element)
-    return [Candidate(np.array(result))]
 
 
-def pick_next_element(adj_table: dict[int, list[tuple[int, bool]]], current_element: int) -> int:
+def pick_next_element(adj_table: dict[int, list[tuple[int, bool]]], current_element) -> int:
     """Returns the next element to extend the offspring with.
     Raises NoNextElementException if there is no next element to extend with.
     """
@@ -204,8 +172,9 @@ def remove_references(adj_table: dict[int, list[tuple[int, bool]]], value: int):
                 break
 
 
-def create_adj_table(candidate1: Candidate, candidate2: Candidate) -> dict[int, list[tuple[int, bool]]]:
+def create_adj_table(candidate1, candidate2) -> dict[int, list[tuple[int, bool]]]:
     """Create an adjacency table for candidate1 and candidate2."""
+    # TODO replace table with array and use indexing instead of by key
     adj_table = {x: [] for x in candidate1}
     for x in adj_table:
         adj_in_parent1 = get_adj(x, candidate1)
@@ -221,67 +190,55 @@ def create_adj_table(candidate1: Candidate, candidate2: Candidate) -> dict[int, 
     return adj_table
 
 
-def get_adj(x: int, candidate: Candidate) -> list[int]:
+def get_adj(x: int, candidate) -> list[int]:
     """Returns the adjacent values of x in candidate as a list."""
-    x_idx = candidate.index(x)
+    x_idx = index(candidate, x)
     prev_idx = x_idx - 1
     next_idx = x_idx + 1 if x_idx < candidate.size - 1 else 0
     return [int(candidate[prev_idx]), int(candidate[next_idx])]
 
 
-def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
+def recombine_PMX(parent1, parent2, *offspring) -> None:
     """Use two parent candidates to produce two offspring using partially mapped crossover."""
     size = parent1.size
-    all_offspring = []
+    offspring1, offspring2 = offspring
     first_pos = rd.randrange(0, size - 1)
     second_pos = rd.randrange(first_pos, size)
-    for p1, p2 in [(parent1, parent2), (parent2, parent1)]:
-        offspring = np.zeros_like(p1)
+    for off, (p1, p2) in zip([offspring1, offspring2], [(parent1, parent2), (parent2, parent1)]):
         # We must initialize offspring with -1's, to identify whether a spot is not yet filled.
-        for i in range(size):
-            offspring[i] = -1
-        offspring[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
+        off.fill(-1)
+
+        off[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
         for elem in p2[first_pos:second_pos + 1]:
             if elem in p1[first_pos:second_pos + 1]:
                 continue  # elem already occurs in offspring
             # elem is not yet in offspring, find the index to place it
-            index = 0
+            idx = 0
             value = elem
             while value != -1:
-                index = p2.index(value)
-                value = offspring[index]
-            offspring[index] = elem
+                idx = index(p2, value)
+                value = off[idx]
+            off[idx] = elem
         for i in range(size):
-            if offspring[i] == -1:
-                offspring[i] = p2[i]
-        all_offspring.append(Candidate(offspring))
-    return all_offspring
+            if off[i] == -1:
+                off[i] = p2[i]
 
 
-def recombine_order_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
+def recombine_order_crossover(parent1, parent2, *offspring) -> None:
     """Use two parent candidates to produce two offspring using order crossover."""
     size = parent1.size
-    all_offspring = []
-    # first_pos = rd.randrange(0, size - 1)
-    # second_pos = rd.randrange(first_pos, size)
-    first_pos, second_pos = (3, 6)
-    for p1, p2 in [(parent1, parent2), (parent2, parent1)]:
-        offspring = np.zeros_like(p1)
-        # We must initialize offspring with -1's, to identify whether a spot is not yet filled.
-        for i in range(size):
-            offspring[i] = -1
-        offspring[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
-
+    offspring1, offspring2 = offspring
+    first_pos = rd.randrange(0, size - 1)
+    second_pos = rd.randrange(first_pos, size)
+    for off, (p1, p2) in zip([offspring1, offspring2], [(parent1, parent2), (parent2, parent1)]):
+        off[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
         idx_p2 = second_pos + 1
         idx_off = idx_p2
         while idx_off != first_pos:
-            if p2[idx_p2] not in offspring[first_pos:second_pos + 1]:
-                offspring[idx_off] = p2[idx_p2]
+            if p2[idx_p2] not in off[first_pos:second_pos + 1]:
+                off[idx_off] = p2[idx_p2]
                 idx_off = 0 if idx_off + 1 >= size else idx_off + 1
             idx_p2 = 0 if idx_p2 + 1 >= size else idx_p2 + 1
-
-        all_offspring.append(Candidate(offspring))
-    return all_offspring
 
 
 def index(array, value: int) -> int:
@@ -291,89 +248,92 @@ def index(array, value: int) -> int:
     return int(np.where(array == value)[0][0])
 
 
-def init_monte_carlo(p: Parameters) -> [Candidate]:
+def init_monte_carlo(population, p: Parameters) -> None:
     """Initializes the population at random."""
-    population = []
-    sample = list(range(len(p.distance_matrix)))
+    sample = np.array(list(range(len(p.distance_matrix))), dtype=int)
     for i in range(p.pop_size):
-        array = np.array(sample)
-        np.random.shuffle(array)
-        population.append(array)
-    return population
+        population[i][:] = sample[:]
+        np.random.shuffle(population[i])
 
 
-def init_avoid_inf_heuristic(p: Parameters) -> list[Candidate]:
+def init_avoid_inf_heuristic(population, p: Parameters) -> None:
     """Initializes the population using a heuristic which avoids infinite values."""
-    population = []
-    for _ in range(p.pop_size):
+    for i in range(p.pop_size):
         choices = list(range(len(p.distance_matrix)))
-        candidate = []
+        idx = 0
         while len(choices) != 0:
-            if len(candidate) == 0:  # The first element is picked at random.
+            if len(population[i]) == 0:  # The first element is picked at random.
                 choice = rd.choice(choices)
                 choices.remove(choice)
-                candidate.append(choice)
+                population[i][idx] = choice
+                idx += 1
                 continue
-            possible_next = [x for x in choices if p.distance_matrix[candidate[-1]][x] != math.inf]
+            possible_next = [x for x in choices if p.distance_matrix[population[i][idx - 1]][x] != math.inf]
             if len(possible_next) == 0:
                 # Pick the first choice because all next choices lead to inf anyway.
                 next_element = choices[0]
             else:
                 # Pick the best choice with a small probability, random otherwise.
                 if rd.random() < 0.05:
-                    next_element = min(possible_next, key=lambda x: p.distance_matrix[candidate[-1]][x])
+                    next_element = min(possible_next, key=lambda x: p.distance_matrix[population[i][idx - 1]][x])
                 else:
                     next_element = rd.choice(possible_next)
-            candidate.append(next_element)
+            population[i][idx] = next_element
+            idx += 1
             choices.remove(next_element)
-        population.append(Candidate(np.array(candidate)))
-    return population
 
 
-def select_k_tournament(population: list[Candidate], p: Parameters) -> Candidate:
+def select_k_tournament(population, population_fit, p: Parameters):
     """Performs a k-tournament on the population. Returns the best candidate among k random samples."""
-    selected = []
-    for i in range(p.k):
-        selected.append(rd.choice(population))
-    return min(selected, key=lambda x: x.fitness)
+    best_fit = math.inf
+    selected = None
+    for _ in range(p.k):
+        idx = rd.randrange(0, p.pop_size)
+        if population_fit[idx] < best_fit:
+            selected = population[idx]
+    return selected
 
 
-def select_top_k(population: list[Candidate], k: int) -> Candidate:
+def select_top_k(population, population_fit, p: Parameters):
     """Performs top-k selection on the population. Returns a random candidate among the k best candidates.
     Assumes that population is already sorted from best to worst; this is the case
     when using (lambda+mu) elimination.
     """
-    return rd.choice(population[:k])
+    raise NotImplementedError
 
 
-def elim_lambda_plus_mu(population: list[Candidate], offspring: list[Candidate], p: Parameters) -> list[Candidate]:
-    """Performs (lambda+mu)-elimination. Returns the new population."""
-    population.extend(offspring)
-    population.sort(key=lambda x: p.fitness_func(x, p))
-    return population[:p.pop_size]
+def elim_lambda_plus_mu(population, population_fit, offspring, offspring_fit, p: Parameters):
+    """Performs (lambda+mu)-elimination."""
+    both = np.concatenate((population, offspring))
+    both_fit = np.concatenate((population_fit, offspring_fit))
+    idx = np.argsort(both_fit)
+    both = np.reshape(both[idx], both.shape)
+    both_fit = np.reshape(both_fit[idx], both_fit.shape)
+    population = both[:p.pop_size]
+    population_fit = both_fit[:p.pop_size]
+    offspring = both[p.pop_size:]
+    offspring_fit = both_fit[p.pop_size:]
+    return population, population_fit, offspring, offspring_fit
 
 
-def elim_lambda_comma_mu(population: list[Candidate], offspring: list[Candidate], p: Parameters) -> list[Candidate]:
+def elim_lambda_comma_mu(population, population_fit, offspring, p: Parameters):
     """Performs (lambda,mu)-elimination. Returns the new population."""
-    offspring.sort(key=lambda x: p.fitness_func(x, p))
-    return offspring[:p.pop_size]
+    raise NotImplementedError
 
 
-def elim_age_based(population: list[Candidate], offspring: list[Candidate], p: Parameters) -> list[Candidate]:
+def elim_age_based(population, population_fit, offspring, p: Parameters):
     """Performs age-based elimination. Returns the new population."""
-    return offspring
+    raise NotImplementedError
 
 
-def elim_k_tournament(population: list[Candidate], offspring: list[Candidate], p: Parameters) -> list[Candidate]:
+def elim_k_tournament(population, population_fit, offspring, p: Parameters):
     """Performs k-tournament elimination. Returns the new population."""
-    population.extend(offspring)
-    return [select_k_tournament(population, p) for _ in range(p.pop_size)]
+    raise NotImplementedError
 
 
-# Modify the class name to match your student number.
-def recalculate_fitness(population: list[Candidate], p: Parameters):
-    for candidate in population:
-        candidate.fitness = p.fitness_func(candidate, p)
+def recalculate_fitness(population, population_fit, p: Parameters):
+    for i, candidate in enumerate(population):
+        population_fit[i] = p.fitness_func(candidate, p)
 
 
 class r0758170:
@@ -389,47 +349,51 @@ class r0758170:
         file.close()
 
         p = Parameters(distance_matrix)
+        population = np.zeros(shape=(p.pop_size, len(distance_matrix)), dtype=int)
+        offspring = np.zeros(shape=(p.offspring_size, len(distance_matrix)), dtype=int)
+        population_fit = np.zeros(p.pop_size, dtype=float)
+        offspring_fit = np.zeros(p.offspring_size, dtype=float)
 
         # Initialization
-        population = p.init_func(p)
-        recalculate_fitness(population, p)
+        p.init_func(population, p)
+        recalculate_fitness(population, population_fit, p)
 
         current_it = 1
         best_solution = population[0]
-        best_objective = best_solution.fitness
+        best_objective = population_fit[0]
         while True:
             # Selection and recombination
-            offspring = []
-            for i in range(p.mu):
-                p1 = p.select_func(population, p)
-                p2 = p.select_func(population, p)
-                offspring.extend(p.recombine_func(p1, p2))
+            i = 0
+            while i < p.offspring_size:
+                p1 = p.select_func(population, population_fit, p)
+                p2 = p.select_func(population, population_fit, p)
+                p.recombine_func(p1, p2, offspring[i], offspring[i + 1])
+                i += 2
 
             # Mutation
-            for candidate in offspring:
+            for i in range(p.pop_size):
                 if rd.random() < p.mutate_chance:
-                    p.mutate_func(candidate)
-                    p.mutate_func(candidate)
-            for candidate in population:
+                    p.mutate_func(population[i])
+            for i in range(p.offspring_size):
                 if rd.random() < p.mutate_chance:
-                    p.mutate_func(candidate)
-                    p.mutate_func(candidate)
+                    p.mutate_func(offspring[i])
 
-            recalculate_fitness(population, p)
-            recalculate_fitness(offspring, p)
+            recalculate_fitness(population, population_fit, p)
+            recalculate_fitness(offspring, offspring_fit, p)
 
             # Elimination
-            population = p.elim_func(population, offspring, p)
+            population, population_fit, offspring, offspring_fit = p.elim_func(population, population_fit, offspring,
+                                                                               offspring_fit, p)
 
             # Recalculate mean and best
             mean_objective = 0.0
             current_best_solution = population[0]
-            current_best_objective = current_best_solution.fitness
-            for candidate in population:
-                mean_objective += candidate.fitness
-                if candidate.fitness < current_best_objective:
-                    current_best_objective = candidate.fitness
-                    current_best_solution = candidate
+            current_best_objective = population_fit[0]
+            for i in range(p.pop_size):
+                mean_objective += population_fit[i]
+                if population_fit[i] < current_best_objective:
+                    current_best_objective = population_fit[i]
+                    current_best_solution = population[i]
             mean_objective = mean_objective / p.pop_size
             if current_best_objective < best_objective:
                 best_objective = current_best_objective
@@ -441,7 +405,7 @@ class r0758170:
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
             print(f'{current_it:6} | mean: {mean_objective:10.2f} | best:{best_objective:10.2f}')
-            timeLeft = self.reporter.report(mean_objective, best_objective, best_solution.array)
+            timeLeft = self.reporter.report(mean_objective, best_objective, best_solution)
             if timeLeft < 0:
                 break
             current_it += 1

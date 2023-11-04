@@ -9,6 +9,7 @@
 - Monte Carlo initialization is awful compared to the heuristic.
 - Saving the fitness and reusing the results makes for a huge speedup.
 - Inversion- and scramble mutation seem to work best.
+- Using numpy arrays for memory management is 13x faster!
 
 ## Things I tried
 
@@ -19,10 +20,12 @@
 
 ### `9276 | mean:   39677.87 | best:  39677.87`
 
+(With the _old_ code)
+
 ```python
 self.k = 5
 self.pop_size = 100
-self.mu = 20  # Must be even.
+self.offspring_size = 20  # Must be even.
 self.mutate_chance = 0.20
 self.mutation_func = mutate_inversion
 self.recombine_func = recombine_PMX
@@ -34,13 +37,33 @@ self.elim_func = elim_lambda_plus_mu
 
 ### `2162 | mean:   40527.27 | best:  40527.27`
 
+(With the _old_ code)
+
 ```python
 self.k = 5
 self.pop_size = 100
-self.mu = 50
+self.offspring_size = 50
 self.mutate_chance = 0.20
 self.mutate_func = mutate_inversion
 self.recombine_func = recombine_order_crossover
+self.fitness_func = path_length
+self.init_func = init_avoid_inf_heuristic
+self.select_func = select_k_tournament
+self.elim_func = elim_lambda_plus_mu
+```
+
+### `122038 | mean:   41795.22 | best:  41621.84`
+
+(With the _new_ code)
+
+```python
+self.distance_matrix = distance_matrix
+self.k = 5
+self.pop_size = 10
+self.offspring_size = 4
+self.mutate_chance = 0.20
+self.mutate_func = mutate_inversion
+self.recombine_func = recombine_PMX
 self.fitness_func = path_length
 self.init_func = init_avoid_inf_heuristic
 self.select_func = select_k_tournament
