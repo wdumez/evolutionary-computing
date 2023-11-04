@@ -27,6 +27,12 @@ class Candidate:
     def __setitem__(self, key, value):
         self.array[key] = value
 
+    def index(self, value) -> int:
+        """Return the first index at which value occurs in candidate.
+        This is just a convenience function for Candidate, which behaves like list.index(value).
+        """
+        return int(np.where(self.array == value)[0][0])
+
 
 class Parameters:
     def __init__(self, distance_matrix):
@@ -125,7 +131,7 @@ def find_cycles(parent1: Candidate, parent2: Candidate) -> list[list[int]]:
         cycle = [current_idx]
         while True:
             allele_p2 = int(parent2[current_idx])
-            current_idx = index_of(parent1, allele_p2)
+            current_idx = parent1.index(allele_p2)
             if current_idx == start_idx:
                 break
             unused_idx.remove(current_idx)
@@ -217,14 +223,14 @@ def create_adj_table(candidate1: Candidate, candidate2: Candidate) -> dict[int, 
 
 def get_adj(x: int, candidate: Candidate) -> list[int]:
     """Returns the adjacent values of x in candidate as a list."""
-    x_idx = index_of(candidate, x)
+    x_idx = candidate.index(x)
     prev_idx = x_idx - 1
     next_idx = x_idx + 1 if x_idx < candidate.size - 1 else 0
     return [int(candidate[prev_idx]), int(candidate[next_idx])]
 
 
 def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
-    """Use two parent candidates to produce one offspring using partially mapped crossover."""
+    """Use two parent candidates to produce two offspring using partially mapped crossover."""
     size = parent1.size
     all_offspring = []
     first_pos = rd.randrange(0, size - 1)
@@ -242,7 +248,7 @@ def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
             index = 0
             value = elem
             while value != -1:
-                index = index_of(p2, value)
+                index = p2.index(value)
                 value = offspring[index]
             offspring[index] = elem
         for i in range(size):
@@ -253,7 +259,7 @@ def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
 
 
 def recombine_order_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
-    """Use two parent candidates to produce one offspring using order crossover."""
+    """Use two parent candidates to produce two offspring using order crossover."""
     size = parent1.size
     all_offspring = []
     # first_pos = rd.randrange(0, size - 1)
@@ -278,12 +284,11 @@ def recombine_order_crossover(parent1: Candidate, parent2: Candidate) -> list[Ca
     return all_offspring
 
 
-def index_of(candidate: Candidate, value: int) -> int:
-    """Return the first index at which value occurs in candidate.
+def index(array, value: int) -> int:
+    """Return the first index at which value occurs in array.
     This is just a convenience function for numpy arrays, which behaves like list.index(value).
-    This also works straight on Candidate objects.
     """
-    return int(np.where(candidate.array == value)[0][0])
+    return int(np.where(array == value)[0][0])
 
 
 def init_monte_carlo(p: Parameters) -> [Candidate]:
