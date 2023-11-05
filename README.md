@@ -9,7 +9,8 @@
 - Monte Carlo initialization is awful compared to the heuristic.
 - Saving the fitness and reusing the results makes for a huge speedup.
 - Inversion- and scramble mutation seem to work best.
-- Using numpy arrays for memory management is 13x faster!
+- Using numpy arrays for memory management is much faster.
+- Using pop size of 10 and off size of 4 gets much better results now?
 
 ## Things I tried
 
@@ -61,6 +62,24 @@ self.distance_matrix = distance_matrix
 self.k = 5
 self.pop_size = 10
 self.offspring_size = 4
+self.mutate_chance = 0.20
+self.mutate_func = mutate_inversion
+self.recombine_func = recombine_PMX
+self.fitness_func = path_length
+self.init_func = init_avoid_inf_heuristic
+self.select_func = select_k_tournament
+self.elim_func = elim_lambda_plus_mu
+```
+
+### `14318 | mean:  131564.37 | best: 120668.21`
+
+(With the _new_ code)
+
+```python
+self.distance_matrix = distance_matrix
+self.k = 5
+self.pop_size = 100
+self.offspring_size = 20
 self.mutate_chance = 0.20
 self.mutate_func = mutate_inversion
 self.recombine_func = recombine_PMX

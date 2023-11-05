@@ -10,15 +10,22 @@ class Parameters:
     def __init__(self, distance_matrix):
         self.distance_matrix = distance_matrix
         self.k = 5
-        self.pop_size = 10
-        self.offspring_size = 4
-        self.mutate_chance = 0.20
+        self.pop_size = 100
+        self.offspring_size = 20
+        self.mutate_chance = 0.05
+        self.recombine_chance = 0.95
         self.mutate_func = mutate_inversion
         self.recombine_func = recombine_PMX
         self.fitness_func = path_length
         self.init_func = init_avoid_inf_heuristic
         self.select_func = select_k_tournament
         self.elim_func = elim_lambda_plus_mu
+        self.lso_func = lso_insert
+        self.lso_chance = 0.05
+        if self.recombine_func.__name__ in [recombine_edge_crossover.__name__]:
+            self.nr_off_per_recombine = 1
+        else:
+            self.nr_off_per_recombine = 2
 
 
 def mutate_inversion(candidate) -> None:
@@ -106,6 +113,7 @@ class NoNextElementException(Exception):
 
 def recombine_edge_crossover(parent1, parent2, offspring) -> None:
     """Use two parent candidates to produce one offspring using edge crossover."""
+    # TODO Creates invalid offspring sometimes...
     adj_table = create_adj_table(parent1, parent2)
     remaining = list(range(len(parent1)))
     current_element = rd.choice(remaining)
@@ -232,7 +240,7 @@ def recombine_order_crossover(parent1, parent2, *offspring) -> None:
     second_pos = rd.randrange(first_pos, size)
     for off, (p1, p2) in zip([offspring1, offspring2], [(parent1, parent2), (parent2, parent1)]):
         off[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
-        idx_p2 = second_pos + 1
+        idx_p2 = second_pos + 1 if second_pos < size - 1 else 0
         idx_off = idx_p2
         while idx_off != first_pos:
             if p2[idx_p2] not in off[first_pos:second_pos + 1]:
@@ -257,27 +265,27 @@ def init_monte_carlo(population, p: Parameters) -> None:
 
 
 def init_avoid_inf_heuristic(population, p: Parameters) -> None:
-    """Initializes the population using a heuristic which avoids infinite values."""
+    """Initializes the population using a heuristic which tries to avoid infinite values."""
     for i in range(p.pop_size):
         choices = list(range(len(p.distance_matrix)))
+        rd.shuffle(choices)
         idx = 0
         while len(choices) != 0:
-            if len(population[i]) == 0:  # The first element is picked at random.
-                choice = rd.choice(choices)
+            # The first element is picked at random.
+            if len(population[i]) == 0:
+                choice = choices[0]
                 choices.remove(choice)
                 population[i][idx] = choice
                 idx += 1
                 continue
-            possible_next = [x for x in choices if p.distance_matrix[population[i][idx - 1]][x] != math.inf]
-            if len(possible_next) == 0:
-                # Pick the first choice because all next choices lead to inf anyway.
+            # Extend with the first element which does not lead to inf.
+            next_element = None
+            for x in choices:
+                if p.distance_matrix[population[i][idx - 1]][x] != math.inf:
+                    next_element = x
+                    break
+            if next_element is None:
                 next_element = choices[0]
-            else:
-                # Pick the best choice with a small probability, random otherwise.
-                if rd.random() < 0.05:
-                    next_element = min(possible_next, key=lambda x: p.distance_matrix[population[i][idx - 1]][x])
-                else:
-                    next_element = rd.choice(possible_next)
             population[i][idx] = next_element
             idx += 1
             choices.remove(next_element)
@@ -289,7 +297,7 @@ def select_k_tournament(population, population_fit, p: Parameters):
     selected = None
     for _ in range(p.k):
         idx = rd.randrange(0, p.pop_size)
-        if population_fit[idx] < best_fit:
+        if selected is None or population_fit[idx] < best_fit:
             selected = population[idx]
     return selected
 
@@ -309,21 +317,25 @@ def elim_lambda_plus_mu(population, population_fit, offspring, offspring_fit, p:
     idx = np.argsort(both_fit)
     both = np.reshape(both[idx], both.shape)
     both_fit = np.reshape(both_fit[idx], both_fit.shape)
-    population = both[:p.pop_size]
-    population_fit = both_fit[:p.pop_size]
-    offspring = both[p.pop_size:]
-    offspring_fit = both_fit[p.pop_size:]
-    return population, population_fit, offspring, offspring_fit
+    population[:] = both[:p.pop_size]
+    population_fit[:] = both_fit[:p.pop_size]
+    offspring[:] = both[p.pop_size:]
+    offspring_fit[:] = both_fit[p.pop_size:]
 
 
-def elim_lambda_comma_mu(population, population_fit, offspring, p: Parameters):
-    """Performs (lambda,mu)-elimination. Returns the new population."""
-    raise NotImplementedError
+def elim_lambda_comma_mu(population, population_fit, offspring, offspring_fit, p: Parameters):
+    """Performs (lambda,mu)-elimination."""
+    idx = np.argsort(offspring_fit)
+    offspring = np.reshape(offspring[idx], offspring.shape)
+    offspring_fit = np.reshape(offspring_fit[idx], offspring_fit.shape)
+    population[:] = offspring[:p.pop_size]
+    population_fit[:] = offspring_fit[:p.pop_size]
 
 
-def elim_age_based(population, population_fit, offspring, p: Parameters):
-    """Performs age-based elimination. Returns the new population."""
-    raise NotImplementedError
+def elim_age_based(population, population_fit, offspring, offspring_fit, p: Parameters):
+    """Performs age-based elimination. Requires pop_size == off_size."""
+    population[:] = offspring[:]
+    population_fit[:] = offspring_fit[:]
 
 
 def elim_k_tournament(population, population_fit, offspring, p: Parameters):
@@ -331,9 +343,40 @@ def elim_k_tournament(population, population_fit, offspring, p: Parameters):
     raise NotImplementedError
 
 
+def lso_insert(candidate, candidate_fit, p: Parameters):
+    """Performs a local search using one insertion.
+    Candidate is updated in-place if a better candidate was found.
+    """
+    tmp = np.copy(candidate)
+    new_candidate = np.copy(candidate)
+    best_fit = candidate_fit
+    for i in range(1, len(candidate)):
+        x = tmp[i]
+        tmp[1: i + 1] = tmp[:i]
+        tmp[0] = x
+        new_fit = p.fitness_func(tmp, p)
+        if new_fit < best_fit:
+            best_fit = new_fit
+            new_candidate[:] = tmp[:]
+        tmp[:] = candidate[:]
+    if best_fit < candidate_fit:
+        candidate[:] = new_candidate[:]
+
+
 def recalculate_fitness(population, population_fit, p: Parameters):
     for i, candidate in enumerate(population):
         population_fit[i] = p.fitness_func(candidate, p)
+
+
+def is_valid_tour(candidate) -> bool:
+    """Returns True if the candidate represents a valid tour, False otherwise.
+    A tour is valid if every city appears in it exactly once. Note that it does
+    not matter whether the length of the tour is infinite in this test.
+    """
+    present = np.zeros(len(candidate), dtype=bool)
+    for x in candidate:
+        present[x] = True
+    return np.all(present)
 
 
 class r0758170:
@@ -356,6 +399,8 @@ class r0758170:
 
         # Initialization
         p.init_func(population, p)
+        for x in population:
+            assert is_valid_tour(x)
         recalculate_fitness(population, population_fit, p)
 
         current_it = 1
@@ -367,23 +412,43 @@ class r0758170:
             while i < p.offspring_size:
                 p1 = p.select_func(population, population_fit, p)
                 p2 = p.select_func(population, population_fit, p)
-                p.recombine_func(p1, p2, offspring[i], offspring[i + 1])
+                if rd.random() < p.recombine_chance:
+                    p.recombine_func(p1, p2, offspring[i], offspring[i + 1])
+                else:
+                    offspring[i][:] = p1[:]
+                    offspring[i + 1][:] = p2[:]
                 i += 2
 
-            # Mutation
+            for x in population:
+                assert is_valid_tour(x)
+            for x in offspring:
+                assert is_valid_tour(x)
+
+            # Local search & Mutation
             for i in range(p.pop_size):
+                if rd.random() < p.lso_chance:
+                    p.lso_func(population[i], population_fit[i], p)
                 if rd.random() < p.mutate_chance:
                     p.mutate_func(population[i])
             for i in range(p.offspring_size):
+                if rd.random() < p.lso_chance:
+                    p.lso_func(offspring[i], offspring_fit[i], p)
                 if rd.random() < p.mutate_chance:
                     p.mutate_func(offspring[i])
+
+            for x in population:
+                assert is_valid_tour(x)
+            for x in offspring:
+                assert is_valid_tour(x)
 
             recalculate_fitness(population, population_fit, p)
             recalculate_fitness(offspring, offspring_fit, p)
 
             # Elimination
-            population, population_fit, offspring, offspring_fit = p.elim_func(population, population_fit, offspring,
-                                                                               offspring_fit, p)
+            p.elim_func(population, population_fit, offspring, offspring_fit, p)
+
+            for x in population:
+                assert is_valid_tour(x)
 
             # Recalculate mean and best
             mean_objective = 0.0
@@ -398,6 +463,8 @@ class r0758170:
             if current_best_objective < best_objective:
                 best_objective = current_best_objective
                 best_solution = current_best_solution
+
+            assert is_valid_tour(best_solution)
 
             # Call the reporter with:
             #  - the mean objective function value of the population
