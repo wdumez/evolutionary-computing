@@ -11,80 +11,53 @@
 - Inversion- and scramble mutation seem to work best.
 - Using numpy arrays for memory management is much faster.
 - Using pop size of 10 and off size of 4 gets much better results now?
+- Not doing any mutation leads to catastrophic convergence quite quickly (as expected).
+- Always mutating gives good results, though professor said not to do this...
+- LSO makes everything really slow, so set to low probability (e.g. 0.01).
+- Setting k_crowding really high (100) makes all offspring very similar, not good.
+- Crowding doesn't seem to be working well: it looks like it has the opposite effect and mean and best converge quickly.
+  Maybe I've implemented it wrong?
 
 ## Things I tried
 
 - I tried adding a version of `mutate_swap` that swaps a nr. of times on average, but this got stuck in a local optimum
   really quickly. Just using the existing function performed much better.
 
-## Results
+## Results on tour200
 
-### `9276 | mean:   39677.87 | best:  39677.87`
-
-(With the _old_ code)
+### `6012 | mean:   39244.09 | best:  39244.09`
 
 ```python
-self.k = 5
-self.pop_size = 100
-self.offspring_size = 20  # Must be even.
-self.mutate_chance = 0.20
-self.mutation_func = mutate_inversion
-self.recombine_func = recombine_PMX
-self.fitness_func = path_length
-self.init_func = init_avoid_inf_heuristic
-self.select_func = select_k_tournament
-self.elim_func = elim_lambda_plus_mu
-```
-
-### `2162 | mean:   40527.27 | best:  40527.27`
-
-(With the _old_ code)
-
-```python
-self.k = 5
+self.k_selection = 5
 self.pop_size = 100
 self.offspring_size = 50
 self.mutate_chance = 0.20
+self.recombine_chance = 1.0
+self.lso_chance = 0.0
+self.recombine_func = recombine_PMX
 self.mutate_func = mutate_inversion
-self.recombine_func = recombine_order_crossover
-self.fitness_func = path_length
+self.lso_func = lso_insert
 self.init_func = init_avoid_inf_heuristic
 self.select_func = select_k_tournament
 self.elim_func = elim_lambda_plus_mu
+self.fitness_func = path_length
 ```
 
-### `122038 | mean:   41795.22 | best:  41621.84`
-
-(With the _new_ code)
+### `4865 | mean:   38662.29 | best:   38662.29`
 
 ```python
-self.distance_matrix = distance_matrix
-self.k = 5
-self.pop_size = 10
-self.offspring_size = 4
+self.k_selection = 3
+self.pop_size = 50
+self.offspring_size = 100
 self.mutate_chance = 0.20
-self.mutate_func = mutate_inversion
+self.recombine_chance = 1.0
+self.lso_chance = 0.0
 self.recombine_func = recombine_PMX
-self.fitness_func = path_length
+self.mutate_func = mutate_inversion
+self.lso_func = lso_insert
 self.init_func = init_avoid_inf_heuristic
 self.select_func = select_k_tournament
-self.elim_func = elim_lambda_plus_mu
-```
-
-### `14318 | mean:  131564.37 | best: 120668.21`
-
-(With the _new_ code)
-
-```python
-self.distance_matrix = distance_matrix
-self.k = 5
-self.pop_size = 100
-self.offspring_size = 20
-self.mutate_chance = 0.20
-self.mutate_func = mutate_inversion
-self.recombine_func = recombine_PMX
+self.elim_func = elim_lambda_plus_mu_crowding
 self.fitness_func = path_length
-self.init_func = init_avoid_inf_heuristic
-self.select_func = select_k_tournament
-self.elim_func = elim_lambda_plus_mu
+self.distance_func = distance
 ```

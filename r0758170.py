@@ -9,19 +9,21 @@ import Reporter
 class Parameters:
     def __init__(self, distance_matrix):
         self.distance_matrix = distance_matrix
-        self.k = 5
-        self.pop_size = 100
-        self.offspring_size = 20
+        self.k_selection = 3
+        self.k_crowding = 5
+        self.pop_size = 50
+        self.offspring_size = 100
         self.mutate_chance = 0.05
         self.recombine_chance = 0.95
-        self.mutate_func = mutate_inversion
+        self.lso_chance = 0.0
         self.recombine_func = recombine_PMX
-        self.fitness_func = path_length
+        self.mutate_func = mutate_inversion
+        self.lso_func = lso_insert
         self.init_func = init_avoid_inf_heuristic
         self.select_func = select_k_tournament
         self.elim_func = elim_lambda_plus_mu
-        self.lso_func = lso_insert
-        self.lso_chance = 0.05
+        self.fitness_func = path_length
+        self.distance_func = distance
         if self.recombine_func.__name__ in [recombine_edge_crossover.__name__]:
             self.nr_off_per_recombine = 1
         else:
@@ -70,6 +72,21 @@ def path_length(candidate, p: Parameters) -> float:
         result += p.distance_matrix[candidate[i]][candidate[i + 1]]
     result += p.distance_matrix[candidate[candidate.size - 1]][candidate[0]]
     return result
+
+
+def distance(candidate1, candidate2) -> int:
+    """Return the distance between two candidates.
+    Uses Hamming distance; so the distance is the nr. of elements that are different.
+    """
+    # We must first align the candidates so that they start with the same element.
+    c1_aligned = np.copy(candidate1)
+    offset = np.where(candidate1 == candidate2[0])[0][0]
+    c1_aligned = np.roll(c1_aligned, shift=-offset)
+    dist = 0
+    for i in range(len(candidate1)):
+        if c1_aligned[i] != candidate2[i]:
+            dist += 1
+    return dist
 
 
 def recombine_cycle_crossover(parent1, parent2, *offspring) -> None:
@@ -295,9 +312,10 @@ def select_k_tournament(population, population_fit, p: Parameters):
     """Performs a k-tournament on the population. Returns the best candidate among k random samples."""
     best_fit = math.inf
     selected = None
-    for _ in range(p.k):
-        idx = rd.randrange(0, p.pop_size)
+    for _ in range(p.k_selection):
+        idx = rd.randrange(0, len(population))
         if selected is None or population_fit[idx] < best_fit:
+            best_fit = population_fit[idx]
             selected = population[idx]
     return selected
 
@@ -314,33 +332,93 @@ def elim_lambda_plus_mu(population, population_fit, offspring, offspring_fit, p:
     """Performs (lambda+mu)-elimination."""
     both = np.concatenate((population, offspring))
     both_fit = np.concatenate((population_fit, offspring_fit))
-    idx = np.argsort(both_fit)
-    both = np.reshape(both[idx], both.shape)
-    both_fit = np.reshape(both_fit[idx], both_fit.shape)
+    sorting_idx = np.argsort(both_fit)
+    both = np.reshape(both[sorting_idx], both.shape)
+    both_fit = np.reshape(both_fit[sorting_idx], both_fit.shape)
     population[:] = both[:p.pop_size]
-    population_fit[:] = both_fit[:p.pop_size]
-    offspring[:] = both[p.pop_size:]
-    offspring_fit[:] = both_fit[p.pop_size:]
+
+
+def elim_lambda_plus_mu_crowding(population, population_fit, offspring, offspring_fit, p: Parameters):
+    """Performs (lambda+mu)-elimination with crowding for diversity promotion."""
+    both = np.concatenate((population, offspring))
+    both_fit = np.concatenate((population_fit, offspring_fit))
+    sorting_idx = np.argsort(both_fit)
+    both = np.reshape(both[sorting_idx], both.shape)
+    both_fit = np.reshape(both_fit[sorting_idx], both_fit.shape)
+    idx_next = 0
+    can_choose = np.ones(len(both), dtype=bool)
+    for i in range(len(population)):
+        # Pick the best next candidate for promotion.
+        population[i] = both[idx_next]
+        can_choose[idx_next] = False
+
+        # Select a candidate to eliminate (crowding).
+        idx_selected = None
+        smallest_dist = math.inf
+        for _ in range(p.k_crowding):
+            j = idx_next
+            while can_choose[j] is False:
+                j = rd.randrange(0, len(both))
+            dist = p.distance_func(population[i], both[j])
+            if idx_selected is None or dist < smallest_dist:
+                smallest_dist = dist
+                idx_selected = j
+        can_choose[idx_selected] = False
+
+        # The next choice for the population must be choose-able.
+        while can_choose[idx_next] is False:
+            idx_next += 1
 
 
 def elim_lambda_comma_mu(population, population_fit, offspring, offspring_fit, p: Parameters):
     """Performs (lambda,mu)-elimination."""
-    idx = np.argsort(offspring_fit)
-    offspring = np.reshape(offspring[idx], offspring.shape)
-    offspring_fit = np.reshape(offspring_fit[idx], offspring_fit.shape)
+    sorting_idx = np.argsort(offspring_fit)
+    offspring = np.reshape(offspring[sorting_idx], offspring.shape)
     population[:] = offspring[:p.pop_size]
-    population_fit[:] = offspring_fit[:p.pop_size]
+
+
+def elim_lambda_comma_mu_crowding(population, population_fit, offspring, offspring_fit, p: Parameters):
+    """Performs (lambda,mu)-elimination with crowding for diversity promotion."""
+    sorting_idx = np.argsort(offspring_fit)
+    offspring = np.reshape(offspring[sorting_idx], offspring.shape)
+    idx_next = 0
+    can_choose = np.ones(len(offspring), dtype=bool)
+    for i in range(len(population)):
+        # Pick the best next candidate for promotion.
+        population[i] = offspring[idx_next]
+        can_choose[idx_next] = False
+
+        # Select a candidate to eliminate (crowding).
+        idx_selected = None
+        smallest_dist = math.inf
+        for _ in range(p.k_crowding):
+            j = idx_next
+            while can_choose[j] is False:
+                j = rd.randrange(0, len(offspring))
+            dist = p.distance_func(population[i], offspring[j])
+            if idx_selected is None or dist < smallest_dist:
+                smallest_dist = dist
+                idx_selected = j
+        can_choose[idx_selected] = False
+
+        # The next choice for the population must be choose-able.
+        while can_choose[idx_next] is False:
+            idx_next += 1
 
 
 def elim_age_based(population, population_fit, offspring, offspring_fit, p: Parameters):
     """Performs age-based elimination. Requires pop_size == off_size."""
     population[:] = offspring[:]
-    population_fit[:] = offspring_fit[:]
 
 
-def elim_k_tournament(population, population_fit, offspring, p: Parameters):
-    """Performs k-tournament elimination. Returns the new population."""
-    raise NotImplementedError
+def elim_k_tournament(population, population_fit, offspring, offspring_fit, p: Parameters):
+    """Performs k-tournament elimination."""
+    new_population = np.copy(population)
+    both = np.concatenate((population, offspring))
+    both_fit = np.concatenate((population_fit, offspring_fit))
+    for i in range(p.pop_size):
+        new_population[i] = select_k_tournament(both, both_fit, p)
+    population[:] = new_population[:]
 
 
 def lso_insert(candidate, candidate_fit, p: Parameters):
@@ -447,6 +525,8 @@ class r0758170:
             # Elimination
             p.elim_func(population, population_fit, offspring, offspring_fit, p)
 
+            recalculate_fitness(population, population_fit, p)
+
             for x in population:
                 assert is_valid_tour(x)
 
@@ -471,7 +551,7 @@ class r0758170:
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            print(f'{current_it:6} | mean: {mean_objective:10.2f} | best:{best_objective:10.2f}')
+            print(f'{current_it:6} | mean: {mean_objective:10.2f} | best: {best_objective:10.2f}')
             timeLeft = self.reporter.report(mean_objective, best_objective, best_solution)
             if timeLeft < 0:
                 break

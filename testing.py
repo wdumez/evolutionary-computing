@@ -10,3 +10,10 @@ def create_random_candidate(size: int):
 
 with open('./tour50.csv') as file:
     distance_matrix = np.loadtxt(file, delimiter=",")
+
+a = create_random_candidate(3)
+b = create_random_candidate(3)
+print(a)
+print(b)
+dist = distance(a, b)
+print(dist)
