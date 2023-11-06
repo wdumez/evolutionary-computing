@@ -146,14 +146,15 @@ def distance(candidate1: Candidate, candidate2: Candidate) -> float:
     return float(dist)
 
 
-def recombine_copy(parent1: Candidate, parent2: Candidate, offspring1: Candidate, offspring2: Candidate, *args):
+def recombine_copy(parent1: Candidate, parent2: Candidate,
+                   offspring1: Candidate, offspring2: Candidate, *args) -> None:
     """Dummy recombine function which copies the parents into the offspring."""
     offspring1[:] = parent1[:]
     offspring2[:] = parent2[:]
 
 
-def recombine_cycle_crossover(parent1: Candidate, parent2: Candidate, offspring1: Candidate,
-                              offspring2: Candidate) -> None:
+def recombine_cycle_crossover(parent1: Candidate, parent2: Candidate,
+                              offspring1: Candidate, offspring2: Candidate, *args) -> None:
     """Use two parent candidates to produce two offspring using cycle crossover."""
     cycles = find_cycles(parent1, parent2)
     for i, cycle in enumerate(cycles):
@@ -191,43 +192,44 @@ class NoNextElementException(Exception):
     """Exception used in edge crossover recombination."""
 
 
-# TODO Creates invalid offspring sometimes, does not work!
-#  This only produces one offspring, which really messes with the code...
-#  Maybe just remove it? It wasn't very performant anyway.
-#  We can speed this up by using an adj. matrix instead of adj. table?
-def recombine_edge_crossover(parent1, parent2, offspring) -> None:
-    """Use two parent candidates to produce one offspring using edge crossover."""
+# TODO Performance is terrible, try changing adj. list to matrix?
+def recombine_edge_crossover(parent1: Candidate, parent2: Candidate,
+                             offspring1: Candidate, offspring2: Candidate, *args) -> None:
+    """Use two parent candidates to produce two offspring using edge crossover.
+    Since edge crossover only creates one offspring per recombination, the second
+    offspring is the same."""
     adj_table = create_adj_table(parent1, parent2)
     remaining = list(range(len(parent1)))
     current_element = rd.choice(remaining)
-    offspring[0] = current_element
+    offspring1[0] = current_element
     idx_off = 1
     remaining.remove(current_element)
     remove_references(adj_table, current_element)
     while len(remaining) != 0:
         try:
             current_element = pick_next_element(adj_table, current_element)
-            offspring[idx_off] = current_element
+            offspring1[idx_off] = current_element
             idx_off += 1
             remaining.remove(current_element)
             remove_references(adj_table, current_element)
         except NoNextElementException:
             try:
-                next_element = pick_next_element(adj_table, offspring[0])
-                offspring = np.roll(offspring, shift=1)
-                offspring[0] = next_element
+                next_element = pick_next_element(adj_table, offspring1[0])
+                offspring1 = np.roll(offspring1, shift=1)
+                offspring1[0] = next_element
                 idx_off += 1
                 remaining.remove(next_element)
                 remove_references(adj_table, next_element)
             except NoNextElementException:
                 current_element = rd.choice(remaining)
-                offspring[idx_off] = current_element
+                offspring1[idx_off] = current_element
                 idx_off += 1
                 remaining.remove(current_element)
                 remove_references(adj_table, current_element)
+    offspring2[:] = offspring1[:]
 
 
-def pick_next_element(adj_table: dict[int, list[tuple[int, bool]]], current_element) -> int:
+def pick_next_element(adj_table: dict[int, list[tuple[int, bool]]], current_element: int) -> int:
     """Returns the next element to extend the offspring with.
     Raises NoNextElementException if there is no next element to extend with.
     """
@@ -263,7 +265,7 @@ def remove_references(adj_table: dict[int, list[tuple[int, bool]]], value: int):
                 break
 
 
-def create_adj_table(candidate1, candidate2) -> dict[int, list[tuple[int, bool]]]:
+def create_adj_table(candidate1: Candidate, candidate2: Candidate) -> dict[int, list[tuple[int, bool]]]:
     """Create an adjacency table for candidate1 and candidate2."""
     # TODO replace table with array and use indexing instead of by key
     adj_table = {x: [] for x in candidate1}
@@ -289,7 +291,8 @@ def get_adj(x: int, candidate: Candidate) -> list[int]:
     return [int(candidate[prev_idx]), int(candidate[next_idx])]
 
 
-def recombine_PMX(parent1: Candidate, parent2: Candidate, offspring1: Candidate, offspring2: Candidate,
+def recombine_PMX(parent1: Candidate, parent2: Candidate,
+                  offspring1: Candidate, offspring2: Candidate,
                   first_pos: int | None = None, second_pos: int | None = None) -> None:
     """Use two parent candidates to produce two offspring using partially mapped crossover."""
     first_pos = rd.randrange(0, parent1.size - 1) if first_pos is None else first_pos
@@ -314,8 +317,8 @@ def recombine_PMX(parent1: Candidate, parent2: Candidate, offspring1: Candidate,
                 off[i] = p2[i]
 
 
-# TODO Doesn't work, sometimes returns offspring which repeat in places...
-def recombine_order_crossover(parent1: Candidate, parent2: Candidate, offspring1: Candidate, offspring2: Candidate,
+def recombine_order_crossover(parent1: Candidate, parent2: Candidate,
+                              offspring1: Candidate, offspring2: Candidate,
                               first_pos: int | None = None, second_pos: int | None = None) -> None:
     """Use two parent candidates to produce two offspring using order crossover."""
     first_pos = rd.randrange(0, parent1.size - 1) if first_pos is None else first_pos
@@ -389,8 +392,8 @@ def select_top_k(population: list[Candidate], k: int) -> Candidate:
     return rd.choice(population[:k])
 
 
-def elim_lambda_plus_mu(population: list[Candidate], offspring: list[Candidate]) \
-        -> tuple[list[Candidate], list[Candidate]]:
+def elim_lambda_plus_mu(population: list[Candidate],
+                        offspring: list[Candidate]) -> tuple[list[Candidate], list[Candidate]]:
     """Performs (lambda+mu)-elimination. Returns the new population and offspring."""
     lamda = len(population)
     population.extend(offspring)
@@ -398,15 +401,13 @@ def elim_lambda_plus_mu(population: list[Candidate], offspring: list[Candidate])
     return population[:lamda], population[lamda:]
 
 
-def elim_lambda_plus_mu_crowding(population: list[Candidate], offspring: list[Candidate]) -> list[Candidate]:
-    """Performs (lambda+mu)-elimination with crowding for diversity promotion.
-    Returns the new population.
-    """
+def elim_lambda_plus_mu_crowding():
+    """Performs (lambda+mu)-elimination with crowding for diversity promotion."""
     raise NotImplementedError
 
 
-def elim_lambda_comma_mu(population: list[Candidate], offspring: list[Candidate]) \
-        -> tuple[list[Candidate], list[Candidate]]:
+def elim_lambda_comma_mu(population: list[Candidate],
+                         offspring: list[Candidate]) -> tuple[list[Candidate], list[Candidate]]:
     """Performs (lambda,mu)-elimination. Returns the new population and offspring."""
     lamda = len(population)
     Candidate.sort(offspring)
@@ -414,16 +415,17 @@ def elim_lambda_comma_mu(population: list[Candidate], offspring: list[Candidate]
     return offspring[:lamda], offspring[lamda:]
 
 
-def elim_lambda_comma_mu_crowding(population: list[Candidate], offspring: list[Candidate]) -> list[Candidate]:
-    """Performs (lambda,mu)-elimination with crowding for diversity promotion.
-    Returns the new population.
-    """
+def elim_lambda_comma_mu_crowding():
+    """Performs (lambda,mu)-elimination with crowding for diversity promotion."""
     raise NotImplementedError
 
 
-def elim_age_based(population: list[Candidate], offspring: list[Candidate]) -> list[Candidate]:
-    """Performs age-based elimination. Returns the new population."""
-    return offspring
+def elim_age_based(population: list[Candidate],
+                   offspring: list[Candidate]) -> tuple[list[Candidate], list[Candidate]]:
+    """Performs age-based elimination. Returns the new population and offspring.
+    Requires the population and offspring to be the same length.
+    """
+    return offspring, population
 
 
 def elim_k_tournament(population: list[Candidate], offspring: list[Candidate], k: int) -> list[Candidate]:
@@ -491,7 +493,7 @@ class r0758170:
 
         # TODO move parameters
         k = 5
-        lamda = 20
+        lamda = 100
         mu = 100
 
         # Initialization
@@ -501,6 +503,7 @@ class r0758170:
             x.recalculate_fitness(distance_matrix)
 
         assert_valid_tours(population)
+        assert_valid_tours(offspring)
 
         current_it = 1
         best_solution = population[0]
@@ -511,8 +514,6 @@ class r0758170:
                 p1 = select_k_tournament(population, k)
                 p2 = select_k_tournament(population, k)
                 p1.recombine(p2, offspring[i], offspring[i + 1])
-                assert_valid_tour(offspring[i])
-                assert_valid_tour(offspring[i + 1])
 
             assert_valid_tours(population)
             assert_valid_tours(offspring)
@@ -531,7 +532,7 @@ class r0758170:
             assert_valid_tours(offspring)
 
             # Elimination
-            population, offspring = elim_lambda_comma_mu(population, offspring)
+            population, offspring = elim_age_based(population, offspring)
 
             assert_valid_tours(population)
             assert_valid_tours(offspring)
@@ -554,8 +555,6 @@ class r0758170:
                 best_solution = current_best_solution
 
             assert is_valid_tour(best_solution)
-            assert_valid_tours(population)
-            assert_valid_tours(offspring)
 
             # Call the reporter with:
             #  - the mean objective function value of the population
