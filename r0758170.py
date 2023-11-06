@@ -1,6 +1,5 @@
 from __future__ import annotations
 import random as rd
-from typing import Tuple, List
 
 import math
 import numpy as np
@@ -193,6 +192,7 @@ class NoNextElementException(Exception):
 
 
 # TODO Performance is terrible, try changing adj. list to matrix?
+#      Also, does not yet work!
 def recombine_edge_crossover(parent1: Candidate, parent2: Candidate,
                              offspring1: Candidate, offspring2: Candidate, *args) -> None:
     """Use two parent candidates to produce two offspring using edge crossover.
@@ -491,7 +491,9 @@ class r0758170:
         distance_matrix = np.loadtxt(file, delimiter=",")
         file.close()
 
-        # TODO move parameters
+        # Parameters
+        # TODO These should eventually be moved into the Candidate class,
+        #      so they can be used for self-adaptivity.
         k = 5
         lamda = 100
         mu = 100
