@@ -1,6 +1,5 @@
 import numpy as np
 from r0758170 import *
-from numpy.typing import NDArray
 
 
 def create_random_candidate(size: int) -> Candidate:
@@ -14,7 +13,14 @@ with open('./tour50.csv') as file:
 
 n = 50
 k = 5
-population = init_avoid_inf_heuristic(100, distance_matrix)
-offspring = init_monte_carlo(20, distance_matrix)
+lamda = 10
+mu = 2
 
-sel = select_k_tournament(population, 5)
+pop = init_avoid_inf_heuristic(lamda, distance_matrix)
+off = init_monte_carlo(mu, distance_matrix)
+for x in itertools.chain(pop, off):
+    x.recalculate_fitness(distance_matrix)
+
+print(pop[0].fitness)
+local_search_inversion(pop[0], distance_matrix, 5)
+print(pop[0].fitness)

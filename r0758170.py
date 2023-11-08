@@ -1,6 +1,6 @@
 from __future__ import annotations
 import random as rd
-
+import itertools
 import math
 import numpy as np
 import Reporter
@@ -18,9 +18,7 @@ class Candidate:
     def __init__(self, array: NDArray[int]):
         self.array = array
         self.fitness = 0.0
-        self.mutate_prob = 0.05
-        self.recombine_prob = 1.0
-        self.local_search_prob = 0.0
+        self.nr_mutations = 1
         self.mutate_func = mutate_inversion
         self.recombine_func = recombine_order_crossover
         self.local_search_func = local_search_insert
@@ -57,25 +55,20 @@ class Candidate:
         """Return the first index where value appears."""
         return int(np.where(self.array == value)[0][0])
 
-    def mutate(self, *args) -> None:
-        """Mutate in-place with a probability of self.mutate_prob."""
-        if rd.random() < self.mutate_prob:
-            self.mutate_func(self, *args)
+    def mutate(self) -> None:
+        """Mutate in-place self.nr_mutations times."""
+        for _ in range(self.nr_mutations):
+            self.mutate_func(self)
 
-    def recombine(self, *args) -> None:
-        """Recombine with another parent to produce offspring, with a probability of self.recombine_prob.
-        Otherwise, the offspring will be copies of the parents.
+    def recombine(self, other_parent, offspring1, offspring2) -> None:
+        """Recombine with another parent to produce offspring.
         The offspring must be provided because they will be changed in-place.
         """
-        if rd.random() < self.recombine_prob:
-            self.recombine_func(self, *args)
-        else:
-            recombine_copy(self, *args)
+        self.recombine_func(self, other_parent, offspring1, offspring2)
 
     def local_search(self, distance_matrix: NDArray[float]) -> None:
-        """Perform a local search with a probability of self.local_search_prob."""
-        if rd.random() < self.local_search_prob:
-            self.local_search_func(self, distance_matrix)
+        """Perform a local search."""
+        self.local_search_func(self, distance_matrix)
 
     def recalculate_fitness(self, distance_matrix: NDArray[float]) -> None:
         """Recalculate the fitness."""
@@ -86,17 +79,17 @@ class Candidate:
         return self.distance_func(self, other_candidate)
 
 
-def mutate_inversion(candidate: Candidate, first_pos: int | None = None, second_pos: int | None = None) -> None:
+def mutate_inversion(candidate: Candidate) -> None:
     """Mutate in-place using inversion mutation."""
-    first_pos = rd.randrange(0, candidate.size - 1) if first_pos is None else first_pos
-    second_pos = rd.randrange(first_pos + 1, candidate.size) if second_pos is None else second_pos
+    first_pos = rd.randrange(0, candidate.size - 1)
+    second_pos = rd.randrange(first_pos + 1, candidate.size)
     candidate[first_pos:second_pos + 1] = np.flip(candidate[first_pos:second_pos + 1])
 
 
-def mutate_swap(candidate: Candidate, first_pos: int | None = None, second_pos: int | None = None) -> None:
+def mutate_swap(candidate: Candidate) -> None:
     """Mutate in-place using swap mutation."""
-    first_pos = rd.randrange(0, candidate.size) if first_pos is None else first_pos
-    second_pos = first_pos if second_pos is None else second_pos
+    first_pos = rd.randrange(0, candidate.size)
+    second_pos = first_pos
     while second_pos == first_pos:
         second_pos = rd.randrange(0, candidate.size)
     tmp = candidate[first_pos]
@@ -104,17 +97,17 @@ def mutate_swap(candidate: Candidate, first_pos: int | None = None, second_pos: 
     candidate[second_pos] = tmp
 
 
-def mutate_scramble(candidate: Candidate, first_pos: int | None = None, second_pos: int | None = None) -> None:
+def mutate_scramble(candidate: Candidate) -> None:
     """Mutate in-place using scramble mutation."""
-    first_pos = rd.randrange(0, candidate.size - 1) if first_pos is None else first_pos
-    second_pos = rd.randrange(first_pos + 1, candidate.size) if second_pos is None else second_pos
+    first_pos = rd.randrange(0, candidate.size - 1)
+    second_pos = rd.randrange(first_pos + 1, candidate.size)
     np.random.shuffle(candidate[first_pos:second_pos + 1])
 
 
-def mutate_insert(candidate: Candidate, first_pos: int | None = None, second_pos: int | None = None) -> None:
+def mutate_insert(candidate: Candidate) -> None:
     """Mutate in-place using insert mutation."""
-    first_pos = rd.randrange(0, candidate.size - 1) if first_pos is None else first_pos
-    second_pos = rd.randrange(first_pos + 1, candidate.size) if second_pos is None else second_pos
+    first_pos = rd.randrange(0, candidate.size - 1)
+    second_pos = rd.randrange(first_pos + 1, candidate.size)
     tmp = candidate[second_pos]
     candidate[first_pos + 2:second_pos + 1] = candidate[first_pos + 1:second_pos]
     candidate[first_pos + 1] = tmp
@@ -146,14 +139,14 @@ def distance(candidate1: Candidate, candidate2: Candidate) -> float:
 
 
 def recombine_copy(parent1: Candidate, parent2: Candidate,
-                   offspring1: Candidate, offspring2: Candidate, *args) -> None:
+                   offspring1: Candidate, offspring2: Candidate) -> None:
     """Dummy recombine function which copies the parents into the offspring."""
     offspring1[:] = parent1[:]
     offspring2[:] = parent2[:]
 
 
 def recombine_cycle_crossover(parent1: Candidate, parent2: Candidate,
-                              offspring1: Candidate, offspring2: Candidate, *args) -> None:
+                              offspring1: Candidate, offspring2: Candidate) -> None:
     """Use two parent candidates to produce two offspring using cycle crossover."""
     cycles = find_cycles(parent1, parent2)
     for i, cycle in enumerate(cycles):
@@ -194,7 +187,7 @@ class NoNextElementException(Exception):
 # TODO Performance is terrible, try changing adj. list to matrix?
 #      Also, does not yet work!
 def recombine_edge_crossover(parent1: Candidate, parent2: Candidate,
-                             offspring1: Candidate, offspring2: Candidate, *args) -> None:
+                             offspring1: Candidate, offspring2: Candidate) -> None:
     """Use two parent candidates to produce two offspring using edge crossover.
     Since edge crossover only creates one offspring per recombination, the second
     offspring is the same."""
@@ -292,11 +285,10 @@ def get_adj(x: int, candidate: Candidate) -> list[int]:
 
 
 def recombine_PMX(parent1: Candidate, parent2: Candidate,
-                  offspring1: Candidate, offspring2: Candidate,
-                  first_pos: int | None = None, second_pos: int | None = None) -> None:
+                  offspring1: Candidate, offspring2: Candidate) -> None:
     """Use two parent candidates to produce two offspring using partially mapped crossover."""
-    first_pos = rd.randrange(0, parent1.size - 1) if first_pos is None else first_pos
-    second_pos = rd.randrange(first_pos, parent1.size) if second_pos is None else second_pos
+    first_pos = rd.randrange(0, parent1.size - 1)
+    second_pos = rd.randrange(first_pos, parent1.size)
     for off, (p1, p2) in zip([offspring1, offspring2], [(parent1, parent2), (parent2, parent1)]):
         # We must initialize offspring with -1's, to identify whether a spot is not yet filled.
         off.array.fill(-1)
@@ -318,11 +310,10 @@ def recombine_PMX(parent1: Candidate, parent2: Candidate,
 
 
 def recombine_order_crossover(parent1: Candidate, parent2: Candidate,
-                              offspring1: Candidate, offspring2: Candidate,
-                              first_pos: int | None = None, second_pos: int | None = None) -> None:
+                              offspring1: Candidate, offspring2: Candidate) -> None:
     """Use two parent candidates to produce two offspring using order crossover."""
-    first_pos = rd.randrange(0, parent1.size - 1) if first_pos is None else first_pos
-    second_pos = rd.randrange(first_pos, parent1.size) if second_pos is None else second_pos
+    first_pos = rd.randrange(0, parent1.size - 1)
+    second_pos = rd.randrange(first_pos, parent1.size)
     for off, (p1, p2) in zip([offspring1, offspring2], [(parent1, parent2), (parent2, parent1)]):
         off[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
         idx_p2 = second_pos + 1 if second_pos < parent1.size - 1 else 0
@@ -332,6 +323,8 @@ def recombine_order_crossover(parent1: Candidate, parent2: Candidate,
                 off[idx_off] = p2[idx_p2]
                 idx_off = 0 if idx_off + 1 >= parent1.size else idx_off + 1
             idx_p2 = 0 if idx_p2 + 1 >= parent1.size else idx_p2 + 1
+    assert_valid_tour(offspring1)
+    assert_valid_tour(offspring2)
 
 
 def init_monte_carlo(size: int, distance_matrix: NDArray[float]) -> list[Candidate]:
@@ -401,9 +394,41 @@ def elim_lambda_plus_mu(population: list[Candidate],
     return population[:lamda], population[lamda:]
 
 
-def elim_lambda_plus_mu_crowding():
-    """Performs (lambda+mu)-elimination with crowding for diversity promotion."""
-    raise NotImplementedError
+# TODO After a random nr. of iterations, this leads to invalid tours. Some values are missing, others are copied.
+#      Just like last time, the cause seems to be that (somehow) the returned population and offspring can have
+#      the same candidate in it, so during recombination >= 1 parent and offspring are actually the same object.
+#      Maybe try rewriting so it's more clear which objects go where?
+def elim_lambda_plus_mu_crowding(population: list[Candidate],
+                                 offspring: list[Candidate],
+                                 crowding_factor: int) -> tuple[list[Candidate], list[Candidate]]:
+    """Performs (lambda+mu)-elimination with a crowding strategy for diversity promotion.
+    This crowding scheme is similar but not the same as the one shown in the lecture.
+    If the crowding_factor is 0, then this is the same as regular (lambda+mu)-elimination.
+    """
+    mu = len(offspring)
+    population.extend(offspring)
+    Candidate.sort(population)
+    new_population = []
+    new_offspring = []
+    # Trim the population back to inv_length lamda by removing mu candidates.
+    # We do this by taking the next best element from population, and
+    # then taking [crowding_factor] random samples from the remaining population.
+    # The sample most similar to the next best element is removed from the population.
+    for _ in range(mu):
+        next_element = population.pop(0)
+        best_dist = math.inf
+        most_similar = population[-1]  # If the crowding factor is 0, then we remove the worst candidate as usual.
+        for _ in range(crowding_factor):
+            sample = rd.choice(population)
+            dist = next_element.distance(sample)
+            if dist < best_dist:
+                best_dist = dist
+                most_similar = sample
+        new_population.append(next_element)
+        new_offspring.append(most_similar)
+        population.remove(most_similar)
+    new_population.extend(population)
+    return new_population, new_offspring
 
 
 def elim_lambda_comma_mu(population: list[Candidate],
@@ -424,23 +449,20 @@ def elim_age_based(population: list[Candidate],
                    offspring: list[Candidate]) -> tuple[list[Candidate], list[Candidate]]:
     """Performs age-based elimination. Returns the new population and offspring.
     Requires the population and offspring to be the same length.
+    This is really just a specific case of (lamda,mu)-elimination.
     """
-    return offspring, population
+    assert len(population) == len(offspring), \
+        f'Age based elimination requires lambda == mu, got: {len(population)} != {len(offspring)}'
+    return elim_lambda_comma_mu(population, offspring)
 
 
-def elim_k_tournament(population: list[Candidate], offspring: list[Candidate], k: int) -> list[Candidate]:
+def elim_k_tournament():
     """Performs k-tournament elimination. Returns the new population."""
-    both = []
-    both.extend(population)
-    both.extend(offspring)
-    new_population = []
-    for i in range(len(population)):
-        new_population.append(select_k_tournament(both, k))
-    return new_population
+    raise NotImplementedError
 
 
 def local_search_insert(candidate: Candidate, distance_matrix: NDArray[float]) -> None:
-    """Performs a local search using one insertion.
+    """Performs a 1-opt local search using one insertion.
     Candidate is updated in-place if a better candidate was found.
     """
     tmp = copy.deepcopy(candidate)
@@ -454,7 +476,27 @@ def local_search_insert(candidate: Candidate, distance_matrix: NDArray[float]) -
         if tmp.fitness < best_fit:
             best_fit = tmp.fitness
             new_candidate[:] = tmp[:]
-        tmp[:] = candidate[:]
+        tmp[:i] = tmp[1:i + 1]
+        tmp[i] = x
+    if best_fit < candidate.fitness:
+        candidate[:] = new_candidate[:]
+
+
+def local_search_inversion(candidate: Candidate, distance_matrix: NDArray[float], inv_length: int) -> None:
+    """Performs a 1-opt local search using one inversion, of [inv_length] elements.
+    Candidate is updated in-place if a better candidate was found.
+    """
+    assert 1 < inv_length < len(candidate), f'Got bad inversion length: {inv_length}'
+    tmp = copy.deepcopy(candidate)
+    new_candidate = copy.deepcopy(candidate)
+    best_fit = candidate.fitness
+    for i in range(candidate.size - inv_length + 1):
+        tmp[i:i + inv_length] = np.flip(tmp.array[i:i + inv_length])
+        tmp.recalculate_fitness(distance_matrix)
+        if tmp.fitness < best_fit:
+            best_fit = tmp.fitness
+            new_candidate[:] = tmp[:]
+        tmp[i:i + inv_length] = np.flip(tmp.array[i:i + inv_length])
     if best_fit < candidate.fitness:
         candidate[:] = new_candidate[:]
 
@@ -496,7 +538,8 @@ class r0758170:
         #      so they can be used for self-adaptivity.
         k = 5
         lamda = 100
-        mu = 100
+        mu = 20
+        mutation_prob = 0.05
 
         # Initialization
         population = init_avoid_inf_heuristic(lamda, distance_matrix)
@@ -521,20 +564,17 @@ class r0758170:
             assert_valid_tours(offspring)
 
             # Local search & Mutation
-            for x in population:
-                x.local_search(distance_matrix)
-                x.mutate()
-                x.recalculate_fitness(distance_matrix)
-            for x in offspring:
-                x.local_search(distance_matrix)
-                x.mutate()
-                x.recalculate_fitness(distance_matrix)
+            for x in itertools.chain(population, offspring):
+                if rd.random() < mutation_prob:
+                    x.mutate()
+                    x.local_search(distance_matrix)
+                    x.recalculate_fitness(distance_matrix)
 
             assert_valid_tours(population)
             assert_valid_tours(offspring)
 
             # Elimination
-            population, offspring = elim_age_based(population, offspring)
+            population, offspring = elim_lambda_plus_mu(population, offspring)
 
             assert_valid_tours(population)
             assert_valid_tours(offspring)
