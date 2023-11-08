@@ -31,7 +31,7 @@ class Candidate:
     def __init__(self, array: NDArray[int]):
         self.array = array
         self.fitness = 0.0
-        self.nr_mutations = 1
+        self.nr_mutations = 5
         self.mutate_func = mutate_inversion
         self.recombine_func = recombine_edge_crossover
         self.local_search_func = local_search_insert
@@ -219,7 +219,7 @@ def recombine_edge_crossover(parent1: Candidate, parent2: Candidate) -> list[Can
         except NoNextElementException:
             try:
                 next_element = pick_next_element(adj_table, offspring[0])
-                offspring = np.roll(offspring, shift=1)
+                offspring.array = np.roll(offspring.array, shift=1)
                 offspring[0] = next_element
                 idx_off += 1
                 remaining.remove(next_element)
@@ -417,20 +417,21 @@ def elim_lambda_plus_mu(population: list[Candidate],
 #      Maybe try rewriting so it's more clear which objects go where?
 def elim_lambda_plus_mu_crowding(population: list[Candidate],
                                  offspring: list[Candidate],
-                                 crowding_factor: int) -> tuple[list[Candidate], list[Candidate]]:
+                                 crowding_factor: int) -> list[Candidate]:
     """Performs (lambda+mu)-elimination with a crowding strategy for diversity promotion.
     This crowding scheme is similar but not the same as the one shown in the lecture.
     If the crowding_factor is 0, then this is the same as regular (lambda+mu)-elimination.
     """
     lamda = len(population)
     mu = len(offspring)
+    assert (lamda + mu) % 2 == 0, f'The sum of lamda and mu must be even, got: {lamda} + {mu}.'
     both = [x for x in itertools.chain(population, offspring)]
     Candidate.sort(both)
     new_population = []
-    new_offspring = []
-    while len(new_population) < lamda and len(new_offspring) < mu:
+    removed = []
+    while len(new_population) < lamda and len(removed) < mu:
         choice = both[0]
-        most_similar = choice
+        most_similar = both[-1]  # If crowding_factor is 0, then remove worst as usual.
         closest_dist = math.inf
         for _ in range(crowding_factor):
             sample = choice
@@ -442,32 +443,55 @@ def elim_lambda_plus_mu_crowding(population: list[Candidate],
                 most_similar = sample
         assert choice is not most_similar, "choice is most_similar, this can't be!"
         new_population.append(choice)
-        new_offspring.append(most_similar)
+        removed.append(most_similar)
         both.remove(choice)
         both.remove(most_similar)
     if len(new_population) < lamda:
         new_population.extend(both)
-    elif len(new_offspring) < mu:
-        new_offspring.extend(both)
-    return new_population, new_offspring
+    return new_population
 
 
 def elim_lambda_comma_mu(population: list[Candidate],
-                         offspring: list[Candidate]) -> tuple[list[Candidate], list[Candidate]]:
-    """Performs (lambda,mu)-elimination. Returns the new population and offspring."""
+                         offspring: list[Candidate]) -> list[Candidate]:
+    """Performs (lambda,mu)-elimination. Returns the new population."""
     lamda = len(population)
+    mu = len(offspring)
+    assert lamda <= mu, \
+        f'(lambda,mu)-elimination requires lambda <= mu, got: {lamda} > {mu}'
     Candidate.sort(offspring)
-    offspring.extend(population)
-    return offspring[:lamda], offspring[lamda:]
+    return offspring[:lamda]
 
 
-def elim_lambda_comma_mu_crowding():
+def elim_lambda_comma_mu_crowding(population: list[Candidate],
+                                  offspring: list[Candidate],
+                                  crowding_factor: int) -> list[Candidate]:
     """Performs (lambda,mu)-elimination with crowding for diversity promotion."""
-    raise NotImplementedError
+    lamda = len(population)
+    mu = len(offspring)
+    assert 2 * lamda <= mu, \
+        f'(lambda,mu)-elimination with crowding requires 2*lambda <= mu, got: {2 * lamda} > {mu}'
+    Candidate.sort(offspring)
+    new_population = []
+    for _ in range(lamda):
+        choice = offspring[0]
+        most_similar = offspring[-1]
+        best_dist = math.inf
+        for _ in range(crowding_factor):
+            sample = choice
+            while sample is choice:
+                sample = rd.choice(offspring)
+            dist = choice.distance(sample)
+            if dist < best_dist:
+                best_dist = dist
+                most_similar = sample
+        new_population.append(choice)
+        offspring.remove(choice)
+        offspring.remove(most_similar)
+    return new_population
 
 
 def elim_age_based(population: list[Candidate],
-                   offspring: list[Candidate]) -> tuple[list[Candidate], list[Candidate]]:
+                   offspring: list[Candidate]) -> list[Candidate]:
     """Performs age-based elimination. Returns the new population and offspring.
     Requires the population and offspring to be the same length.
     This is really just a specific case of (lamda,mu)-elimination.
@@ -504,7 +528,7 @@ def local_search_insert(candidate: Candidate, distance_matrix: NDArray[float]) -
 
 
 def local_search_inversion(candidate: Candidate, distance_matrix: NDArray[float], inv_length: int) -> None:
-    """Performs a 1-opt local search using one inversion, of [inv_length] elements.
+    """Performs a 1-opt local search using one inversion, of inv_length elements.
     Candidate is updated in-place if a better candidate was found.
     """
     assert 1 < inv_length < len(candidate), f'Got bad inversion length: {inv_length}'
@@ -557,12 +581,10 @@ class r0758170:
         # Parameters
         # TODO These should eventually be moved into the Candidate class,
         #      so they can be used for self-adaptivity.
-        k = 5
-        lamda = 10
-        mu = 20
+        k = 2
+        lamda = 50
+        mu = 100
         mutation_prob = 0.05
-
-        assert (lamda + mu) % 2 == 0, f'The sum of lamda and mu must be even, got: {lamda} + {mu}.'
 
         # Initialization
         population = init_avoid_inf_heuristic(lamda, distance_matrix)
@@ -577,10 +599,12 @@ class r0758170:
             offspring = []
 
             # Selection and recombination
-            for i in range(0, len(offspring), 2):
+            for i in range(0, mu, 2):
                 p1 = select_k_tournament(population, k)
                 p2 = select_k_tournament(population, k)
                 offspring.extend(p1.recombine(p2))
+
+            assert len(offspring) == mu, f'Nr. offspring ({len(offspring)}) does not match mu ({mu})'
 
             assert_valid_tours(population)
             assert_valid_tours(offspring)
@@ -596,7 +620,7 @@ class r0758170:
             assert_valid_tours(offspring)
 
             # Elimination
-            population = elim_lambda_plus_mu(population, offspring)
+            population = elim_lambda_comma_mu_crowding(population, offspring, 5)
 
             assert_valid_tours(population)
 
