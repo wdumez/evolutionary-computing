@@ -34,7 +34,7 @@ class Candidate:
         self.nr_mutations = 5
         self.mutate_func = mutate_inversion
         self.recombine_func = recombine_edge_crossover
-        self.local_search_func = local_search_insert
+        self.local_search_func = local_search_dummy
         self.fitness_func = path_length
         self.distance_func = distance_hamming
 
@@ -424,7 +424,8 @@ def elim_lambda_plus_mu_crowding(population: list[Candidate],
     """
     lamda = len(population)
     mu = len(offspring)
-    assert (lamda + mu) % 2 == 0, f'The sum of lamda and mu must be even, got: {lamda} + {mu}.'
+    assert (lamda + mu) % 2 == 0, \
+        f'(lamda+mu)-elimination with crowding requires lamda + mu to be even, got: {lamda} + {mu}.'
     both = [x for x in itertools.chain(population, offspring)]
     Candidate.sort(both)
     new_population = []
@@ -492,8 +493,7 @@ def elim_lambda_comma_mu_crowding(population: list[Candidate],
 
 def elim_age_based(population: list[Candidate],
                    offspring: list[Candidate]) -> list[Candidate]:
-    """Performs age-based elimination. Returns the new population and offspring.
-    Requires the population and offspring to be the same length.
+    """Performs age-based elimination. Returns the new population.
     This is really just a specific case of (lamda,mu)-elimination.
     """
     assert len(population) == len(offspring), \
@@ -501,9 +501,22 @@ def elim_age_based(population: list[Candidate],
     return elim_lambda_comma_mu(population, offspring)
 
 
-def elim_k_tournament():
+def elim_k_tournament(population: list[Candidate],
+                      offspring: list[Candidate],
+                      k: int) -> list[Candidate]:
     """Performs k-tournament elimination. Returns the new population."""
-    raise NotImplementedError
+    lamda = len(population)
+    population.extend(offspring)
+    new_population = []
+    for _ in range(lamda):
+        sample = select_k_tournament(population, k)
+        new_population.append(sample)
+        population.remove(sample)
+    return new_population
+
+
+def local_search_dummy(candidate: Candidate, distance_matrix: NDArray[float]) -> None:
+    """Dummy function which does not change the candidate."""
 
 
 def local_search_insert(candidate: Candidate, distance_matrix: NDArray[float]) -> None:
@@ -581,7 +594,9 @@ class r0758170:
         # Parameters
         # TODO These should eventually be moved into the Candidate class,
         #      so they can be used for self-adaptivity.
-        k = 2
+        k_selection = 3
+        k_elimination = 5
+        crowding_factor = 5
         lamda = 50
         mu = 100
         mutation_prob = 0.05
@@ -600,8 +615,8 @@ class r0758170:
 
             # Selection and recombination
             for i in range(0, mu, 2):
-                p1 = select_k_tournament(population, k)
-                p2 = select_k_tournament(population, k)
+                p1 = select_k_tournament(population, k_selection)
+                p2 = select_k_tournament(population, k_selection)
                 offspring.extend(p1.recombine(p2))
 
             assert len(offspring) == mu, f'Nr. offspring ({len(offspring)}) does not match mu ({mu})'
@@ -620,7 +635,8 @@ class r0758170:
             assert_valid_tours(offspring)
 
             # Elimination
-            population = elim_lambda_comma_mu_crowding(population, offspring, 5)
+            # population = elim_k_tournament(population, offspring, k_elimination)
+            population = elim_lambda_plus_mu_crowding(population, offspring, crowding_factor)
 
             assert_valid_tours(population)
 
