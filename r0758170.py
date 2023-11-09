@@ -33,7 +33,7 @@ class Candidate:
         self.fitness = 0.0
         self.nr_mutations = 1
         self.mutate_func = mutate_inversion
-        self.recombine_func = recombine_edge_crossover
+        self.recombine_func = recombine_order_crossover
         self.local_search_func = local_search_inversion
         self.fitness_func = path_length
         self.distance_func = distance_hamming
@@ -613,7 +613,10 @@ class r0758170:
             for i in range(0, mu, 2):
                 p1 = select_k_tournament(population, k_selection)
                 p2 = select_k_tournament(population, k_selection)
-                offspring.extend(p1.recombine(p2))
+                new_offspring = p1.recombine(p2)
+                for x in new_offspring:
+                    x.recalculate_fitness(distance_matrix)
+                offspring.extend(new_offspring)
 
             assert len(offspring) == mu, f'Nr. offspring ({len(offspring)}) does not match mu ({mu})'
 
@@ -624,7 +627,7 @@ class r0758170:
             for x in itertools.chain(population, offspring):
                 if rd.random() < mutation_prob:
                     x.mutate()
-                    x.local_search(distance_matrix)
+                    # x.local_search(distance_matrix)
                     x.recalculate_fitness(distance_matrix)
 
             assert_valid_tours(population)
@@ -633,12 +636,11 @@ class r0758170:
             # Elimination
             # population = elim_lambda_plus_mu(population, offspring)
             population = elim_lambda_plus_mu_crowding(population, offspring, crowding_factor)
+            # population = elim_lambda_comma_mu(population, offspring)
+            # population = elim_lambda_comma_mu_crowding(population, offspring, crowding_factor)
             # population = elim_k_tournament(population, offspring, k_elimination)
 
             assert_valid_tours(population)
-
-            for x in population:
-                x.recalculate_fitness(distance_matrix)
 
             # Recalculate mean and best
             mean_objective, current_best_solution = Candidate.stats(population)
@@ -653,7 +655,7 @@ class r0758170:
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
             print(f'{current_it:6} | mean: {mean_objective:10.2f} | best: {best_solution.fitness:10.2f}')
-            timeLeft = self.reporter.report(mean_objective, best_solution.fitness, best_solution)
+            timeLeft = self.reporter.report(mean_objective, best_solution.fitness, best_solution.array)
             if timeLeft < 0:
                 break
             current_it += 1
