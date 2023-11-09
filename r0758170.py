@@ -238,7 +238,6 @@ def pick_next_element(edge_table: dict[int, list[tuple[int, bool]]], current_ele
     lst = edge_table[current_element]
     if len(lst) == 0:
         raise NoNextElementException
-    # TODO can be sped up with bin. search?
     for x, is_common in lst:
         if is_common:
             return x
@@ -260,7 +259,6 @@ def remove_references(edge_table: dict[int, list[tuple[int, bool]]], value: int)
     for x, lst in edge_table.items():
         if x == value:
             continue  # We can skip this case because value cannot be adjacent to itself.
-        # TODO can be sped up with bin. search?
         for y, is_common in lst:
             if value == y:
                 lst.remove((y, is_common))
@@ -269,7 +267,6 @@ def remove_references(edge_table: dict[int, list[tuple[int, bool]]], value: int)
 
 def create_edge_table(candidate1: Candidate, candidate2: Candidate) -> dict[int, list[tuple[int, bool]]]:
     """Create an edge table for candidate1 and candidate2."""
-    # TODO replace table with array and use indexing instead of by key
     edge_table = {x: [] for x in candidate1}
     for x in edge_table:
         adj_in_parent1 = get_adj(x, candidate1)

@@ -1,5 +1,14 @@
 # Evolutionary Computing Project
 
+## Targets
+
+- tour50: simple greedy heuristic 27723
+- tour100: simple greedy heuristic 90851
+- tour200: simple greedy heuristic 39745
+- tour500: simple greedy heuristic 157034
+- tour750: simple greedy heuristic 197541
+- tour1000: simple greedy heuristic 195848
+
 ## Observations
 
 - PMX is not as bad as the book makes it out to be.
@@ -22,6 +31,33 @@
 
 - I tried adding a version of `mutate_swap` that swaps a nr. of times on average, but this got stuck in a local optimum
   really quickly. Just using the existing function performed much better.
+
+## Results on tour50
+
+### `5261 | mean:        inf | best:   26503.78`
+
+This beat the heuristic! The switch to edge crossover is what did it, I think.
+
+```python
+self.array = array
+self.fitness = 0.0
+self.nr_mutations = 1
+self.mutate_func = mutate_inversion
+self.recombine_func = recombine_edge_crossover
+self.local_search_func = local_search_inversion
+self.fitness_func = path_length
+self.distance_func = distance_hamming
+
+k_selection = 5
+k_elimination = 5
+crowding_factor = 5
+lamda = 100
+mu = 40
+mutation_prob = 0.05
+
+init_monte_carlo
+lamda_plus_mu_crowding
+```
 
 ## Results on tour200
 
