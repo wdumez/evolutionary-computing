@@ -31,10 +31,10 @@ class Candidate:
     def __init__(self, array: NDArray[int]):
         self.array = array
         self.fitness = 0.0
-        self.nr_mutations = 5
+        self.nr_mutations = 1
         self.mutate_func = mutate_inversion
         self.recombine_func = recombine_edge_crossover
-        self.local_search_func = local_search_dummy
+        self.local_search_func = local_search_inversion
         self.fitness_func = path_length
         self.distance_func = distance_hamming
 
@@ -195,49 +195,47 @@ class NoNextElementException(Exception):
     """Exception used in edge crossover recombination."""
 
 
-# TODO Performance is terrible, try changing adj. list to matrix?
-#      Also, does not yet work!
 def recombine_edge_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
     """Use two parent candidates to produce two offspring using edge crossover.
     Since edge crossover only creates one offspring per recombination, the second
     offspring is the same."""
     offspring = copy.deepcopy(parent1)
-    adj_table = create_adj_table(parent1, parent2)
+    edge_table = create_edge_table(parent1, parent2)
     remaining = list(range(len(parent1)))
     current_element = rd.choice(remaining)
     offspring[0] = current_element
     idx_off = 1
     remaining.remove(current_element)
-    remove_references(adj_table, current_element)
+    remove_references(edge_table, current_element)
     while len(remaining) != 0:
         try:
-            current_element = pick_next_element(adj_table, current_element)
+            current_element = pick_next_element(edge_table, current_element)
             offspring[idx_off] = current_element
             idx_off += 1
             remaining.remove(current_element)
-            remove_references(adj_table, current_element)
+            remove_references(edge_table, current_element)
         except NoNextElementException:
             try:
-                next_element = pick_next_element(adj_table, offspring[0])
+                next_element = pick_next_element(edge_table, offspring[0])
                 offspring.array = np.roll(offspring.array, shift=1)
                 offspring[0] = next_element
                 idx_off += 1
                 remaining.remove(next_element)
-                remove_references(adj_table, next_element)
+                remove_references(edge_table, next_element)
             except NoNextElementException:
                 current_element = rd.choice(remaining)
                 offspring[idx_off] = current_element
                 idx_off += 1
                 remaining.remove(current_element)
-                remove_references(adj_table, current_element)
+                remove_references(edge_table, current_element)
     return [offspring, copy.deepcopy(offspring)]
 
 
-def pick_next_element(adj_table: dict[int, list[tuple[int, bool]]], current_element: int) -> int:
+def pick_next_element(edge_table: dict[int, list[tuple[int, bool]]], current_element: int) -> int:
     """Returns the next element to extend the offspring with.
     Raises NoNextElementException if there is no next element to extend with.
     """
-    lst = adj_table[current_element]
+    lst = edge_table[current_element]
     if len(lst) == 0:
         raise NoNextElementException
     # TODO can be sped up with bin. search?
@@ -247,7 +245,7 @@ def pick_next_element(adj_table: dict[int, list[tuple[int, bool]]], current_elem
     next_element_options = []
     shortest_len = math.inf
     for x, is_common in lst:
-        x_lst_len = len(adj_table[x])
+        x_lst_len = len(edge_table[x])
         if x_lst_len < shortest_len:
             next_element_options = [x]
             shortest_len = x_lst_len
@@ -257,9 +255,9 @@ def pick_next_element(adj_table: dict[int, list[tuple[int, bool]]], current_elem
     return next_element
 
 
-def remove_references(adj_table: dict[int, list[tuple[int, bool]]], value: int):
-    """Removes all references of value in the lists of adj_table."""
-    for x, lst in adj_table.items():
+def remove_references(edge_table: dict[int, list[tuple[int, bool]]], value: int):
+    """Removes all references of value in the lists of edge_table."""
+    for x, lst in edge_table.items():
         if x == value:
             continue  # We can skip this case because value cannot be adjacent to itself.
         # TODO can be sped up with bin. search?
@@ -269,22 +267,22 @@ def remove_references(adj_table: dict[int, list[tuple[int, bool]]], value: int):
                 break
 
 
-def create_adj_table(candidate1: Candidate, candidate2: Candidate) -> dict[int, list[tuple[int, bool]]]:
-    """Create an adjacency table for candidate1 and candidate2."""
+def create_edge_table(candidate1: Candidate, candidate2: Candidate) -> dict[int, list[tuple[int, bool]]]:
+    """Create an edge table for candidate1 and candidate2."""
     # TODO replace table with array and use indexing instead of by key
-    adj_table = {x: [] for x in candidate1}
-    for x in adj_table:
+    edge_table = {x: [] for x in candidate1}
+    for x in edge_table:
         adj_in_parent1 = get_adj(x, candidate1)
         adj_in_parent2 = get_adj(x, candidate2)
         for y in adj_in_parent1:
             if y in adj_in_parent2:
-                adj_table[x].append((y, True))
+                edge_table[x].append((y, True))
                 adj_in_parent2.remove(y)
             else:
-                adj_table[x].append((y, False))
+                edge_table[x].append((y, False))
         for y in adj_in_parent2:
-            adj_table[x].append((y, False))
-    return adj_table
+            edge_table[x].append((y, False))
+    return edge_table
 
 
 def get_adj(x: int, candidate: Candidate) -> list[int]:
@@ -540,7 +538,7 @@ def local_search_insert(candidate: Candidate, distance_matrix: NDArray[float]) -
         candidate[:] = new_candidate[:]
 
 
-def local_search_inversion(candidate: Candidate, distance_matrix: NDArray[float], inv_length: int) -> None:
+def local_search_inversion(candidate: Candidate, distance_matrix: NDArray[float], inv_length: int = 2) -> None:
     """Performs a 1-opt local search using one inversion, of inv_length elements.
     Candidate is updated in-place if a better candidate was found.
     """
@@ -594,15 +592,16 @@ class r0758170:
         # Parameters
         # TODO These should eventually be moved into the Candidate class,
         #      so they can be used for self-adaptivity.
-        k_selection = 3
+        k_selection = 5
         k_elimination = 5
         crowding_factor = 5
-        lamda = 50
-        mu = 100
+        lamda = 100
+        mu = 40
         mutation_prob = 0.05
 
         # Initialization
-        population = init_avoid_inf_heuristic(lamda, distance_matrix)
+        # population = init_avoid_inf_heuristic(lamda, distance_matrix)
+        population = init_monte_carlo(lamda, distance_matrix)
         for x in population:
             x.recalculate_fitness(distance_matrix)
 
@@ -635,8 +634,9 @@ class r0758170:
             assert_valid_tours(offspring)
 
             # Elimination
-            # population = elim_k_tournament(population, offspring, k_elimination)
+            # population = elim_lambda_plus_mu(population, offspring)
             population = elim_lambda_plus_mu_crowding(population, offspring, crowding_factor)
+            # population = elim_k_tournament(population, offspring, k_elimination)
 
             assert_valid_tours(population)
 
