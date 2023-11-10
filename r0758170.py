@@ -1,6 +1,8 @@
 from __future__ import annotations
 import random as rd
 import itertools
+from typing import Generator, Iterable, Callable
+
 import math
 import numpy as np
 import Reporter
@@ -508,6 +510,25 @@ def elim_k_tournament(population: list[Candidate],
         new_population.append(sample)
         population.remove(sample)
     return new_population
+
+
+# TODO What kind of neighborhood is this, exactly?
+def neighborhood_inversion(candidate: Candidate, inv_length: int) -> Generator[Candidate, None, None]:
+    """Generator which yields all the neighbors in the neighborhood of candidate."""
+    tmp = copy.deepcopy(candidate)
+    for i in range(candidate.size - inv_length + 1):
+        tmp[i:i + inv_length] = np.flip(tmp.array[i:i + inv_length])
+        yield copy.deepcopy(tmp)
+        tmp[i:i + inv_length] = np.flip(tmp.array[i:i + inv_length])
+
+
+def general_local_search(candidate: Candidate, distance_matrix: NDArray[float], depth: int) -> Candidate:
+    best = copy.deepcopy(candidate)
+    for neighbor in neighborhood_inversion(candidate, 2):
+        neighbor.recalculate_fitness(distance_matrix)
+        if neighbor.fitness < best.fitness:
+            best = neighbor
+    return best
 
 
 def local_search_dummy(candidate: Candidate, distance_matrix: NDArray[float]) -> None:

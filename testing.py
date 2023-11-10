@@ -21,6 +21,7 @@ off = init_monte_carlo(mu, distance_matrix)
 for x in itertools.chain(pop, off):
     x.recalculate_fitness(distance_matrix)
 
-print(pop[0].fitness)
-local_search_inversion(pop[0], distance_matrix, 5)
-print(pop[0].fitness)
+c = Candidate(np.array(list(range(n)), dtype=int))
+print(c)
+for x in neighborhood_inversion(c, 4):
+    print(x)
