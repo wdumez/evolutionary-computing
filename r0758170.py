@@ -127,12 +127,12 @@ def mutate_insert(candidate: Candidate) -> None:
 
 
 def path_length(candidate: Candidate, distance_matrix: NDArray[float]) -> float:
-    """Return the length of the path."""
+    """Return the length of the path of candidate."""
     result = 0.0
-    for i in range(candidate.size - 1):
+    for i in range(len(candidate) - 1):
         # Order is important for the distance matrix.
         result += distance_matrix[candidate[i]][candidate[i + 1]]
-    result += distance_matrix[candidate[candidate.size - 1]][candidate[0]]
+    result += distance_matrix[candidate[len(candidate) - 1]][candidate[0]]
     return result
 
 
@@ -200,7 +200,8 @@ class NoNextElementException(Exception):
 def recombine_edge_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
     """Use two parent candidates to produce two offspring using edge crossover.
     Since edge crossover only creates one offspring per recombination, the second
-    offspring is the same."""
+    offspring is the same.
+    """
     offspring = copy.deepcopy(parent1)
     edge_table = create_edge_table(parent1, parent2)
     remaining = list(range(len(parent1)))
@@ -305,8 +306,8 @@ def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
         off[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
         for elem in p2[first_pos:second_pos + 1]:
             if elem in p1[first_pos:second_pos + 1]:
-                continue  # elem already occurs in offspring
-            # elem is not yet in offspring, find the index to place it
+                continue  # elem already occurs in offspring.
+            # elem is not yet in offspring, so find the index to place it.
             idx = 0
             value = elem
             while value != -1:
@@ -317,7 +318,6 @@ def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
             if off[i] == -1:
                 off[i] = p2[i]
         offspring.append(off)
-    assert_valid_tours(offspring)
     return offspring
 
 
@@ -329,6 +329,7 @@ def recombine_order_crossover(parent1: Candidate, parent2: Candidate) -> list[Ca
     for p1, p2 in [(parent1, parent2), (parent2, parent1)]:
         off = copy.deepcopy(parent1)
         off[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
+        # Now copy the remaining values of p2 into off, starting from second_pos.
         idx_p2 = second_pos + 1 if second_pos < parent1.size - 1 else 0
         idx_off = idx_p2
         while idx_off != first_pos:
@@ -337,7 +338,6 @@ def recombine_order_crossover(parent1: Candidate, parent2: Candidate) -> list[Ca
                 idx_off = 0 if idx_off + 1 >= parent1.size else idx_off + 1
             idx_p2 = 0 if idx_p2 + 1 >= parent1.size else idx_p2 + 1
         offspring.append(off)
-    assert_valid_tours(offspring)
     return offspring
 
 
@@ -380,6 +380,56 @@ def init_avoid_inf_heuristic(size: int, distance_matrix: NDArray[float]) -> list
             choices.remove(next_element)
         population.append(candidate)
     return population
+
+
+RECURSIONS = 0
+
+
+def greedy_heuristic(distance_matrix: NDArray[float]) -> Candidate:
+    """Uses a greedy heuristic to find a solution."""
+    choices = list(range(len(distance_matrix)))
+    rd.shuffle(choices)
+    results = []
+    for start in choices:
+        starting_choices = copy.deepcopy(choices)
+        starting_choices.remove(start)
+        result = greedy_recursive(starting_choices, [start], distance_matrix)
+        if result is not False:
+            results.append(result)
+            break
+    results.sort(key=lambda x: path_length(x, distance_matrix))
+    candidate = Candidate(np.array(results[0], dtype=int))
+    candidate.recalculate_fitness(distance_matrix)
+    return candidate
+
+
+def greedy_recursive(choices: list[int], current_result: list[int], distance_matrix: NDArray[float]) \
+        -> list[int] | bool:
+    global RECURSIONS
+    RECURSIONS += 1
+    print(RECURSIONS)
+    if len(choices) == 0:
+        if distance_matrix[current_result[-1]][current_result[0]] == math.inf:
+            # The last choice cannot connect to the first choice, so backtrack.
+            return False
+        # Answer found.
+        return current_result
+    choices.sort(key=lambda x: distance_matrix[current_result[-1]][x])
+    for choice in choices:
+        if distance_matrix[current_result[-1]][choice] == math.inf:
+            # This would produce an infinite in total, so it's
+            # actually not a valid choice.
+            break  # Instead of continue because all the next choices will be inf too.
+        new_choices = copy.deepcopy(choices)
+        new_choices.remove(choice)
+        current_result.append(choice)
+        answer = greedy_recursive(new_choices, current_result, distance_matrix)
+        if answer is not False:
+            return answer
+        # Backtrack the last choice.
+        current_result.pop()
+    # The previous choice cannot lead to any solutions.
+    return False
 
 
 def select_k_tournament(population: list[Candidate], k: int) -> Candidate:

@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 from r0758170 import *
 
@@ -16,12 +18,10 @@ k = 5
 lamda = 10
 mu = 2
 
-pop = init_avoid_inf_heuristic(lamda, distance_matrix)
-off = init_monte_carlo(mu, distance_matrix)
-for x in itertools.chain(pop, off):
-    x.recalculate_fitness(distance_matrix)
-
-c = Candidate(np.array(list(range(n)), dtype=int))
-print(c)
-for x in neighborhood_inversion(c, 4):
-    print(x)
+seed = 23
+rd.seed(seed)
+np.random.seed(seed)
+sys.setrecursionlimit(10 * len(distance_matrix))
+heur = greedy_heuristic(distance_matrix)
+print(heur)
+print(heur.fitness)
