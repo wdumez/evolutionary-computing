@@ -38,7 +38,7 @@ class Candidate:
         self.recombine_func = recombine_order_crossover
         self.local_search_func = local_search_inversion
         self.fitness_func = path_length
-        self.distance_func = distance_hamming
+        self.distance_func = distance_different
 
     def __eq__(self, other):
         return np.array_equal(self.array, other.array)
@@ -136,9 +136,9 @@ def path_length(candidate: Candidate, distance_matrix: NDArray[float]) -> float:
     return result
 
 
-def distance_hamming(candidate1: Candidate, candidate2: Candidate) -> float:
+def distance_different(candidate1: Candidate, candidate2: Candidate) -> float:
     """Return the distance between two candidates.
-    Uses Hamming distance; so the distance is the nr. of elements that are different.
+    The distance is the nr. of elements that are different.
     """
     # We must first align the candidates so that they start with the same element.
     c1_aligned = copy.deepcopy(candidate1.array)
