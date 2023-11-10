@@ -25,6 +25,10 @@
 - Lambda plus mu crowding works quite well with visible diversity (mean is higher than best).
 - Lambda comma mu crowding doesn't seem to work so well.
 - Setting the nr. of mutations too high (10) on inversion mutation gets stuck in a worse local optimum more quickly.
+- If lambda > mu, then (lambda+mu)-elim implicitly uses elitism. This is useful when seeding the population with the
+  super good heuristic to make sure that effort is not lost.
+- When seeding with heuristic solutions, maybe selective pressure should be lowered? Try this.
+- Unsurprisingly, the init greedy heuristic is great.
 
 ## Things I tried
 

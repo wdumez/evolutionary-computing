@@ -1,7 +1,8 @@
 from __future__ import annotations
 import random as rd
 import itertools
-from typing import Generator, Iterable, Callable
+import sys
+from typing import Generator
 
 import math
 import numpy as np
@@ -382,11 +383,29 @@ def init_avoid_inf_heuristic(size: int, distance_matrix: NDArray[float]) -> list
     return population
 
 
-RECURSIONS = 0
+def init_greedy_heuristic(size: int, distance_matrix: NDArray[float]) -> list[Candidate]:
+    """Initializes the population with a greedy heuristic."""
+    population = []
+    for i in range(size):
+        candidate = greedy_heuristic(distance_matrix)
+        population.append(candidate)
+    return population
 
 
-def greedy_heuristic(distance_matrix: NDArray[float]) -> Candidate:
-    """Uses a greedy heuristic to find a solution."""
+def greedy_heuristic(distance_matrix: NDArray[float], fast=True) -> Candidate:
+    """Uses a greedy heuristic to find a solution.
+    If fast is True, then it returns the first found solution using a random starting position.
+    If fast is False, then it tries all starting positions and returns the best found solution.
+    For the same starting position, the result is always the same. This means that it can only
+    generate at most as many different candidates as the tour length.
+    """
+    # We need to temporarily up the recursion limit because the nr. of recursions is just
+    # slightly higher than the problem size (e.g. tour200 recurses 200-210 times).
+    # The default limit is 1000, so for tour1000 this *just* becomes a problem.
+    # Therefore, we increase the recursion limit in this function only.
+    recursion_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(10 * len(distance_matrix))
+
     choices = list(range(len(distance_matrix)))
     rd.shuffle(choices)
     results = []
@@ -396,39 +415,39 @@ def greedy_heuristic(distance_matrix: NDArray[float]) -> Candidate:
         result = greedy_recursive(starting_choices, [start], distance_matrix)
         if result is not False:
             results.append(result)
-            break
+            if fast:
+                break
     results.sort(key=lambda x: path_length(x, distance_matrix))
     candidate = Candidate(np.array(results[0], dtype=int))
-    candidate.recalculate_fitness(distance_matrix)
+
+    sys.setrecursionlimit(recursion_limit)
     return candidate
 
 
-def greedy_recursive(choices: list[int], current_result: list[int], distance_matrix: NDArray[float]) \
-        -> list[int] | bool:
-    global RECURSIONS
-    RECURSIONS += 1
-    print(RECURSIONS)
+def greedy_recursive(choices: list[int], current_result: list[int],
+                     distance_matrix: NDArray[float]) -> list[int] | bool:
     if len(choices) == 0:
         if distance_matrix[current_result[-1]][current_result[0]] == math.inf:
             # The last choice cannot connect to the first choice, so backtrack.
             return False
-        # Answer found.
+        # All edges are valid, so the answer has been found.
         return current_result
+
     choices.sort(key=lambda x: distance_matrix[current_result[-1]][x])
     for choice in choices:
         if distance_matrix[current_result[-1]][choice] == math.inf:
-            # This would produce an infinite in total, so it's
-            # actually not a valid choice.
-            break  # Instead of continue because all the next choices will be inf too.
+            # Not a valid choice because the distance is infinite.
+            break  # Instead of continue because all the next choices will be inf too due to the sorting.
         new_choices = copy.deepcopy(choices)
         new_choices.remove(choice)
         current_result.append(choice)
         answer = greedy_recursive(new_choices, current_result, distance_matrix)
         if answer is not False:
+            # An answer was found, so propagate it back up.
             return answer
-        # Backtrack the last choice.
+        # The last choice did not lead to a solution, so backtrack.
         current_result.pop()
-    # The previous choice cannot lead to any solutions.
+    # None of the choices could lead to any solutions.
     return False
 
 
@@ -668,8 +687,9 @@ class r0758170:
         mutation_prob = 0.05
 
         # Initialization
+        # population = init_monte_carlo(lamda, distance_matrix)
         # population = init_avoid_inf_heuristic(lamda, distance_matrix)
-        population = init_monte_carlo(lamda, distance_matrix)
+        population = init_greedy_heuristic(lamda, distance_matrix)
         for x in population:
             x.recalculate_fitness(distance_matrix)
 
