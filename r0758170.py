@@ -19,16 +19,24 @@ class Candidate:
         candidates.sort(key=lambda x: x.fitness, reverse=reverse)
 
     @staticmethod
-    def stats(candidates: list[Candidate]) -> tuple[float, Candidate]:
-        """Return the mean fitness and best candidate from a list of candidates."""
+    def stats(candidates: list[Candidate], include_inf=True) -> tuple[float, Candidate]:
+        """Return the mean fitness and best candidate from a list of candidates.
+        If include_inf is False, then infinite values are ignored.
+        """
         assert candidates != [], 'Cannot get stats of an empty list.'
         mean = 0.0
         best = candidates[0]
+        nr_included = 0
         for x in candidates:
+            if not include_inf and x.fitness == math.inf:
+                continue
             mean += x.fitness
             if x.fitness < best.fitness:
                 best = x
-        mean = mean / len(candidates)
+            nr_included += 1
+        if nr_included == 0:
+            return 0.0, best
+        mean = mean / nr_included
         return mean, best
 
     def __init__(self, array: NDArray[int]):
@@ -679,17 +687,20 @@ class r0758170:
         # Parameters
         # TODO These should eventually be moved into the Candidate class,
         #      so they can be used for self-adaptivity.
-        k_selection = 5
+        k_selection = 10
         k_elimination = 5
-        crowding_factor = 5
+        crowding_factor = 10
         lamda = 100
         mu = 40
         mutation_prob = 0.05
 
         # Initialization
-        # population = init_monte_carlo(lamda, distance_matrix)
-        # population = init_avoid_inf_heuristic(lamda, distance_matrix)
-        population = init_greedy_heuristic(lamda, distance_matrix)
+
+        # Seeding:
+        population = init_greedy_heuristic(1, distance_matrix)
+        population.extend(init_avoid_inf_heuristic(80, distance_matrix))
+        population.extend(init_monte_carlo(lamda - len(population), distance_matrix))
+
         for x in population:
             x.recalculate_fitness(distance_matrix)
 
@@ -715,10 +726,10 @@ class r0758170:
             assert_valid_tours(offspring)
 
             # Local search & Mutation
-            for x in itertools.chain(population, offspring):
+            for x in itertools.chain(offspring):
                 if rd.random() < mutation_prob:
                     x.mutate()
-                    # x.local_search(distance_matrix)
+                    x.local_search(distance_matrix)
                     x.recalculate_fitness(distance_matrix)
 
             assert_valid_tours(population)
@@ -734,7 +745,7 @@ class r0758170:
             assert_valid_tours(population)
 
             # Recalculate mean and best
-            mean_objective, current_best_solution = Candidate.stats(population)
+            mean_objective, current_best_solution = Candidate.stats(population, False)
             if current_best_solution.fitness < best_solution.fitness:
                 best_solution = copy.deepcopy(current_best_solution)
 
