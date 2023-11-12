@@ -117,6 +117,23 @@ class Candidate:
         return self.distance_func(self, other_candidate)
 
 
+def recombine_probabilities(prob1: float, prob2: float, alpha: float = 1) -> float:
+    """Recombine two probabilities into a new value.
+    If alpha == 0, then the new value lies in between them.
+    If alpha == 1, then the new value differs by at most the distance between them.
+    """
+    dist = abs(prob1 - prob2)
+    if prob1 <= prob2:
+        lower = prob1 - alpha * dist
+        higher = prob2 + alpha * dist
+    else:
+        lower = prob2 + alpha * dist
+        higher = prob1 - alpha * dist
+    lower = max(lower, 0.01)  # Clamp lower to a minimum of 0.01.
+    higher = min(higher, 1.0)  # Clamp higher to a maximum of 1.0.
+    return rd.uniform(lower, higher)
+
+
 def mutate_inversion(candidate: Candidate) -> None:
     """Mutate in-place using inversion mutation."""
     first_pos = rd.randrange(0, candidate.size - 1)
@@ -687,8 +704,8 @@ class r0758170:
         # Initialization
 
         # Seeding:
-        population = init_heuristic(1, distance_matrix)
-        population.extend(init_avoid_inf_heuristic(80, distance_matrix))
+        population = init_heuristic(1, distance_matrix, greedy=True)
+        population.extend(init_heuristic(80, distance_matrix, greedy=False))
         population.extend(init_monte_carlo(lamda - len(population), distance_matrix))
 
         for x in population:
@@ -698,7 +715,7 @@ class r0758170:
 
         current_it = 1
         best_solution = copy.deepcopy(population[0])
-        while True:
+        while True:  # No stop condition other than time limit.
             offspring = []
 
             # Selection and recombination

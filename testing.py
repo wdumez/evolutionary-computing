@@ -18,8 +18,11 @@ k = 5
 lamda = 10
 mu = 2
 
-sys.setrecursionlimit(10 * len(distance_matrix))
-heur = heuristic_solution(distance_matrix, True, False)
-heur.recalculate_fitness(distance_matrix)
-# print(heur)
-print(heur.fitness)
+a = [recombine_probabilities(0.01, 0.10, 1.0) for i in range(1000000)]
+sum = sum(a)
+print(sum / len(a))
+# sys.setrecursionlimit(10 * len(distance_matrix))
+# heur = heuristic_solution(distance_matrix, True, False)
+# heur.recalculate_fitness(distance_matrix)
+# # print(heur)
+# print(heur.fitness)
