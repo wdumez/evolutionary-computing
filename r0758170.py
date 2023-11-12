@@ -376,52 +376,22 @@ def init_monte_carlo(size: int, distance_matrix: NDArray[float]) -> list[Candida
     return population
 
 
-def init_avoid_inf_heuristic(size: int, distance_matrix: NDArray[float]) -> list[Candidate]:
-    """Initializes the population using a heuristic which tries to avoid infinite values."""
+def init_heuristic(size: int, distance_matrix: NDArray[float],
+                   fast: bool = True, greedy: bool = True) -> list[Candidate]:
+    """Initializes the population with a heuristic."""
     population = []
     for i in range(size):
-        choices = list(range(len(distance_matrix)))
-        rd.shuffle(choices)
-        idx = 0
-        candidate = Candidate(np.zeros(len(distance_matrix), dtype=int))
-        while len(choices) != 0:
-            # The first element is picked at random.
-            if len(choices) == len(distance_matrix):
-                choice = choices[0]
-                choices.remove(choice)
-                candidate[idx] = choice
-                idx += 1
-                continue
-            # Extend with the first element which does not lead to inf.
-            next_element = None
-            for x in choices:
-                if distance_matrix[candidate[idx - 1]][x] != math.inf:
-                    next_element = x
-                    break
-            if next_element is None:
-                next_element = choices[0]
-            candidate[idx] = next_element
-            idx += 1
-            choices.remove(next_element)
+        candidate = heuristic_solution(distance_matrix, fast, greedy)
         population.append(candidate)
     return population
 
 
-def init_greedy_heuristic(size: int, distance_matrix: NDArray[float]) -> list[Candidate]:
-    """Initializes the population with a greedy heuristic."""
-    population = []
-    for i in range(size):
-        candidate = greedy_heuristic(distance_matrix)
-        population.append(candidate)
-    return population
-
-
-def greedy_heuristic(distance_matrix: NDArray[float], fast=True) -> Candidate:
+def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greedy: bool = True) -> Candidate:
     """Uses a greedy heuristic to find a solution.
     If fast is True, then it returns the first found solution using a random starting position.
     If fast is False, then it tries all starting positions and returns the best found solution.
-    For the same starting position, the result is always the same. This means that it can only
-    generate at most as many different candidates as the tour length.
+    If greedy is True, then it takes the greedy position each step.
+    If greedy is False, then it takes a random step that does not lead to infinite length.
     """
     # We need to temporarily up the recursion limit because the nr. of recursions is just
     # slightly higher than the problem size (e.g. tour200 recurses 200-210 times).
@@ -436,7 +406,7 @@ def greedy_heuristic(distance_matrix: NDArray[float], fast=True) -> Candidate:
     for start in choices:
         starting_choices = copy.deepcopy(choices)
         starting_choices.remove(start)
-        result = greedy_recursive(starting_choices, [start], distance_matrix)
+        result = heuristic_recursive(starting_choices, [start], distance_matrix, greedy)
         if result is not False:
             results.append(result)
             if fast:
@@ -448,8 +418,10 @@ def greedy_heuristic(distance_matrix: NDArray[float], fast=True) -> Candidate:
     return candidate
 
 
-def greedy_recursive(choices: list[int], current_result: list[int],
-                     distance_matrix: NDArray[float]) -> list[int] | bool:
+def heuristic_recursive(choices: list[int], current_result: list[int],
+                        distance_matrix: NDArray[float],
+                        greedy: bool = True) -> list[int] | bool:
+    """Recursive function used in heuristic_solution."""
     if len(choices) == 0:
         if distance_matrix[current_result[-1]][current_result[0]] == math.inf:
             # The last choice cannot connect to the first choice, so backtrack.
@@ -457,15 +429,17 @@ def greedy_recursive(choices: list[int], current_result: list[int],
         # All edges are valid, so the answer has been found.
         return current_result
 
-    choices.sort(key=lambda x: distance_matrix[current_result[-1]][x])
+    if greedy:
+        choices.sort(key=lambda x: distance_matrix[current_result[-1]][x])
+
     for choice in choices:
         if distance_matrix[current_result[-1]][choice] == math.inf:
             # Not a valid choice because the distance is infinite.
-            break  # Instead of continue because all the next choices will be inf too due to the sorting.
+            continue
         new_choices = copy.deepcopy(choices)
         new_choices.remove(choice)
         current_result.append(choice)
-        answer = greedy_recursive(new_choices, current_result, distance_matrix)
+        answer = heuristic_recursive(new_choices, current_result, distance_matrix, greedy)
         if answer is not False:
             # An answer was found, so propagate it back up.
             return answer
@@ -713,7 +687,7 @@ class r0758170:
         # Initialization
 
         # Seeding:
-        population = init_greedy_heuristic(1, distance_matrix)
+        population = init_heuristic(1, distance_matrix)
         population.extend(init_avoid_inf_heuristic(80, distance_matrix))
         population.extend(init_monte_carlo(lamda - len(population), distance_matrix))
 
