@@ -48,6 +48,18 @@ class Candidate:
         self.local_search_func = local_search_inversion
         self.fitness_func = path_length
         self.distance_func = distance_different
+        self.recombine_operators = [
+            recombine_PMX,
+            recombine_cycle_crossover,
+            recombine_edge_crossover,
+            recombine_order_crossover
+        ]
+        self.mutate_operators = [
+            mutate_swap,
+            mutate_inversion,
+            mutate_scramble,
+            mutate_insert
+        ]
 
     def __eq__(self, other):
         return np.array_equal(self.array, other.array)
@@ -83,10 +95,14 @@ class Candidate:
         """Mutate in-place self.nr_mutations times."""
         for _ in range(self.nr_mutations):
             self.mutate_func(self)
+        self.mutate_func = rd.choice(self.mutate_operators)
 
     def recombine(self, other_parent) -> list[Candidate]:
         """Recombine with another parent to produce offspring."""
-        return self.recombine_func(self, other_parent)
+        offspring = self.recombine_func(self, other_parent)
+        for x in offspring:
+            x.recombine_func = rd.choice([self.recombine_func, other_parent.recombine_func])
+        return offspring
 
     def local_search(self, distance_matrix: NDArray[float]) -> None:
         """Perform a local search."""
@@ -687,7 +703,7 @@ class r0758170:
         # Parameters
         # TODO These should eventually be moved into the Candidate class,
         #      so they can be used for self-adaptivity.
-        k_selection = 10
+        k_selection = 2
         k_elimination = 5
         crowding_factor = 10
         lamda = 100
