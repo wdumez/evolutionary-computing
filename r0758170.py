@@ -8,7 +8,7 @@ import math
 import numpy as np
 import Reporter
 import copy
-from numpy.typing import NDArray
+from numpy.typing import NDArray, ArrayLike
 
 
 class Candidate:
@@ -51,7 +51,7 @@ class Candidate:
         self.recombine_func = recombine_order_crossover
         self.local_search_func = local_search_inversion
         self.fitness_func = path_length
-        self.distance_func = distance_different
+        self.distance_func = Hamming_distance
         self.recombine_operators = [
             recombine_PMX,
             recombine_cycle_crossover,
@@ -158,7 +158,7 @@ def mutate_insert(candidate: Candidate) -> None:
     candidate[first_pos + 1] = tmp
 
 
-def path_length(candidate: Candidate, distance_matrix: NDArray[float]) -> float:
+def path_length(candidate: ArrayLike, distance_matrix: NDArray[float]) -> float:
     """Return the length of the path of candidate."""
     result = 0.0
     for i in range(len(candidate) - 1):
@@ -168,7 +168,7 @@ def path_length(candidate: Candidate, distance_matrix: NDArray[float]) -> float:
     return result
 
 
-def distance_different(candidate1: Candidate, candidate2: Candidate) -> float:
+def Hamming_distance(candidate1: Candidate, candidate2: Candidate) -> float:
     """Return the distance between two candidates.
     The distance is the nr. of elements that are different.
     """
@@ -456,6 +456,23 @@ def heuristic_recursive(choices: list[int], current_result: list[int],
     return False
 
 
+def exact_solution(distance_matrix: NDArray[float]) -> Candidate:
+    """Finds the exact solution by trying all options.
+    Obviously only feasible for small problems, because the runtime is O(n!).
+    """
+    base = list(range(len(distance_matrix)))
+    best_fit = math.inf
+    solution = base
+    for tour in itertools.permutations(base):
+        fit = path_length(tour, distance_matrix)
+        if fit < best_fit:
+            best_fit = fit
+            solution = copy.deepcopy(tour)
+    candidate = Candidate(np.array(solution, dtype=int))
+    candidate.recalculate_fitness(distance_matrix)
+    return candidate
+
+
 def select_k_tournament(population: list[Candidate], k: int) -> Candidate:
     """Performs a k-tournament on the population. Returns the best candidate among k random samples."""
     selected = rd.choice(population)
@@ -604,7 +621,7 @@ def local_search_insert(candidate: Candidate, distance_matrix: NDArray[float]) -
 
 
 def local_search_inversion(candidate: Candidate, distance_matrix: NDArray[float], inv_length: int = 2) -> None:
-    """Performs a 1-opt local search using one inversion, of inv_length elements.
+    """Performs a local search using one inversion, of inv_length elements.
     Candidate is updated in-place if a better candidate was found.
     """
     assert 1 < inv_length < len(candidate), f'Got bad inversion length: {inv_length}'
@@ -657,11 +674,11 @@ class r0758170:
         # Parameters
         # TODO These should eventually be moved into the Candidate class,
         #      so they can be used for self-adaptivity.
-        k_selection = 3
+        k_selection = 5
         k_elimination = 5
         crowding_factor = 10
-        lamda = 50
-        mu = 20
+        lamda = 100
+        mu = 40
 
         # Initialization
 
@@ -716,10 +733,10 @@ class r0758170:
 
             # Recalculate mean and best
             mean_objective, current_best_solution, mean_mutation_prob = Candidate.stats(population, False)
-            if current_best_solution.fitness < best_solution.fitness:
-                best_solution = copy.deepcopy(current_best_solution)
-
-            assert is_valid_tour(best_solution)
+            # if current_best_solution.fitness < best_solution.fitness:
+            #     best_solution = copy.deepcopy(current_best_solution)
+            #
+            # assert is_valid_tour(best_solution)
 
             # new_prob = (1 - (mean_objective - best_solution.fitness) / mean_objective) / 2
             # for x in itertools.chain(population):
@@ -730,9 +747,8 @@ class r0758170:
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            print(f'{current_it:6} | mean: {mean_objective:10.2f} | best: {best_solution.fitness:10.2f} | '
-                  f'mutation_prob: {mean_mutation_prob:3.2f}')
-            timeLeft = self.reporter.report(mean_objective, best_solution.fitness, best_solution.array)
+            print(f'{current_it:6} | mean: {mean_objective:10.2f} | best: {current_best_solution.fitness:10.2f}')
+            timeLeft = self.reporter.report(mean_objective, current_best_solution.fitness, current_best_solution.array)
             if timeLeft < 0:
                 break
             current_it += 1
