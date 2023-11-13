@@ -19,30 +19,34 @@ class Candidate:
         candidates.sort(key=lambda x: x.fitness, reverse=reverse)
 
     @staticmethod
-    def stats(candidates: list[Candidate], include_inf=True) -> tuple[float, Candidate]:
+    def stats(candidates: list[Candidate], include_inf=True) -> tuple[float, Candidate, float]:
         """Return the mean fitness and best candidate from a list of candidates.
         If include_inf is False, then infinite values are ignored.
         """
         assert candidates != [], 'Cannot get stats of an empty list.'
         mean = 0.0
         best = candidates[0]
+        mean_mutation_prob = 0.0
         nr_included = 0
         for x in candidates:
             if not include_inf and x.fitness == math.inf:
                 continue
             mean += x.fitness
+            mean_mutation_prob += x.mutation_prob
             if x.fitness < best.fitness:
                 best = x
             nr_included += 1
         if nr_included == 0:
-            return 0.0, best
+            return 0.0, best, 0.0
         mean = mean / nr_included
-        return mean, best
+        mean_mutation_prob = mean_mutation_prob / nr_included
+        return mean, best, mean_mutation_prob
 
     def __init__(self, array: NDArray[int]):
         self.array = array
         self.fitness = 0.0
         self.nr_mutations = 1
+        self.mutation_prob = 0.20
         self.mutate_func = mutate_inversion
         self.recombine_func = recombine_order_crossover
         self.local_search_func = local_search_inversion
@@ -96,12 +100,15 @@ class Candidate:
         for _ in range(self.nr_mutations):
             self.mutate_func(self)
         self.mutate_func = rd.choice(self.mutate_operators)
+        self.recombine_func = rd.choice(self.recombine_operators)
 
-    def recombine(self, other_parent) -> list[Candidate]:
+    def recombine(self, other: Candidate) -> list[Candidate]:
         """Recombine with another parent to produce offspring."""
-        offspring = self.recombine_func(self, other_parent)
+        offspring = self.recombine_func(self, other)
         for x in offspring:
-            x.recombine_func = rd.choice([self.recombine_func, other_parent.recombine_func])
+            x.mutate_func = rd.choice([self.mutate_func, other.mutate_func])
+            x.recombine_func = rd.choice([self.recombine_func, other.recombine_func])
+            pass
         return offspring
 
     def local_search(self, distance_matrix: NDArray[float]) -> None:
@@ -115,23 +122,6 @@ class Candidate:
     def distance(self, other_candidate: Candidate) -> float:
         """Return the distance to another candidate."""
         return self.distance_func(self, other_candidate)
-
-
-def recombine_probabilities(prob1: float, prob2: float, alpha: float = 1) -> float:
-    """Recombine two probabilities into a new value.
-    If alpha == 0, then the new value lies in between them.
-    If alpha == 1, then the new value differs by at most the distance between them.
-    """
-    dist = abs(prob1 - prob2)
-    if prob1 <= prob2:
-        lower = prob1 - alpha * dist
-        higher = prob2 + alpha * dist
-    else:
-        lower = prob2 + alpha * dist
-        higher = prob1 - alpha * dist
-    lower = max(lower, 0.01)  # Clamp lower to a minimum of 0.01.
-    higher = min(higher, 1.0)  # Clamp higher to a maximum of 1.0.
-    return rd.uniform(lower, higher)
 
 
 def mutate_inversion(candidate: Candidate) -> None:
@@ -492,10 +482,6 @@ def elim_lambda_plus_mu(population: list[Candidate],
     return population[:lamda]
 
 
-# TODO After a random nr. of iterations, this leads to invalid tours. Some values are missing, others are copied.
-#      Just like last time, the cause seems to be that (somehow) the returned population and offspring can have
-#      the same candidate in it, so during recombination >= 1 parent and offspring are actually the same object.
-#      Maybe try rewriting so it's more clear which objects go where?
 def elim_lambda_plus_mu_crowding(population: list[Candidate],
                                  offspring: list[Candidate],
                                  crowding_factor: int) -> list[Candidate]:
@@ -694,18 +680,18 @@ class r0758170:
         # Parameters
         # TODO These should eventually be moved into the Candidate class,
         #      so they can be used for self-adaptivity.
-        k_selection = 2
+        k_selection = 3
         k_elimination = 5
         crowding_factor = 10
-        lamda = 100
-        mu = 40
-        mutation_prob = 0.05
+        lamda = 50
+        mu = 20
 
         # Initialization
 
         # Seeding:
+        population = []
         population = init_heuristic(1, distance_matrix, greedy=True)
-        population.extend(init_heuristic(80, distance_matrix, greedy=False))
+        population.extend(init_heuristic(39, distance_matrix, greedy=False))
         population.extend(init_monte_carlo(lamda - len(population), distance_matrix))
 
         for x in population:
@@ -734,7 +720,7 @@ class r0758170:
 
             # Local search & Mutation
             for x in itertools.chain(offspring):
-                if rd.random() < mutation_prob:
+                if rd.random() < x.mutation_prob:
                     x.mutate()
                     x.local_search(distance_matrix)
                     x.recalculate_fitness(distance_matrix)
@@ -752,18 +738,23 @@ class r0758170:
             assert_valid_tours(population)
 
             # Recalculate mean and best
-            mean_objective, current_best_solution = Candidate.stats(population, False)
+            mean_objective, current_best_solution, mean_mutation_prob = Candidate.stats(population, False)
             if current_best_solution.fitness < best_solution.fitness:
                 best_solution = copy.deepcopy(current_best_solution)
 
             assert is_valid_tour(best_solution)
+
+            # new_prob = (1 - (mean_objective - best_solution.fitness) / mean_objective) / 2
+            # for x in itertools.chain(population):
+            #     x.mutation_prob = new_prob
 
             # Call the reporter with:
             #  - the mean objective function value of the population
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            print(f'{current_it:6} | mean: {mean_objective:10.2f} | best: {best_solution.fitness:10.2f}')
+            print(f'{current_it:6} | mean: {mean_objective:10.2f} | best: {best_solution.fitness:10.2f} | '
+                  f'mutation_prob: {mean_mutation_prob:3.2f}')
             timeLeft = self.reporter.report(mean_objective, best_solution.fitness, best_solution.array)
             if timeLeft < 0:
                 break

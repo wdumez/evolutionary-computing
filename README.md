@@ -21,7 +21,7 @@
 - Not doing any mutation leads to catastrophic convergence quite quickly (as expected).
 - Always mutating gives good results, though professor said not to do this...
 - LSO makes everything really slow, so set to low probability (e.g. 0.01).
-- Setting k_crowding really high (100) makes all offspring very similar, not good.
+- Setting crowding factor really high (100) makes all offspring very similar, not good.
 - Lambda plus mu crowding works quite well with visible diversity (mean is higher than best).
 - Lambda comma mu crowding doesn't seem to work so well.
 - Setting the nr. of mutations too high (10) on inversion mutation gets stuck in a worse local optimum more quickly.
@@ -29,6 +29,24 @@
   super good heuristic to make sure that effort is not lost.
 - When seeding with heuristic solutions, maybe selective pressure should be lowered? Try this.
 - Unsurprisingly, the init greedy heuristic is great.
+- More stable convergence when only mutating the offspring? Including the population makes it seem less good.
+- Crowding _really_ works. You can see the mean bouncing around, whereas without crowding you get catastrophic
+  convergence quite quickly.
+- Using one of the parents' mutation prob. when recombining doesn't work well, presumably because the best solutions "
+  want" to lower the mean mutation prob. so that other solutions don't mutate into something better than them. But this
+  makes the prob. near zero, and so there is very little improvement.
+- If you think about it, it makes little sense that the mutation prob. is dictated by the most fit candidates. Because
+  then it will always become such a way that it only benefits the existing best candidates...
+- So having a higher mutation probability (~20% instead of ~5%) makes sense, because at first the recombination is good
+  enough to focus down despite the mutation's best efforts, and at the end the higher mutation prob. will cause a chance
+  to improve the solution further when a local optimum has been found. Now the only question remains: what's a good
+  value for mp?
+- Also, maybe it still makes sense for _adaptivity_ of mp, instead of _self-adaptivity_? E.g., mp starts out low but
+  increases as time goes on.
+- For the recombination and mutation _operators_, I guess it doesn't hurt to allow them to recombine and mutate? All of
+  them are somewhat good, and surely the best ones will get used most in the end.
+- Using (lambda+mu) with crowding and mu >= lambda causes catastrophic convergence quite quickly (a few hundred
+  iterations). This effectively counteracts the diversity promotion (somehow?).
 
 ## Things I tried
 
