@@ -45,4 +45,7 @@
   about the best solution we've ever seen! Namely, this best solution is equal to the best solution in each iteration,
   in this case. **IMPORTANT**: this is only true if no mutation is done on the population! If you do this anyway, make
   sure that the best solution (`population[0]`) _does not_ mutate.
+- I've been testing, and reading up online. Actually, Python lists are faster than numpy arrays for most things. Numpy
+  arrays are only faster for vector operations, like matrix multiplication and dot products and such. Heck, even the
+  accessing is O(1). So maybe I should be using lists again?
 

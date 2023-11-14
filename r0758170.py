@@ -661,8 +661,8 @@ class r0758170:
 
         # Seeding:
         population = []
-        population = init_heuristic(1, distance_matrix, greedy=True)
-        population.extend(init_heuristic(39, distance_matrix, greedy=False))
+        population.extend(init_heuristic(1, distance_matrix, fast=True, greedy=True))
+        population.extend(init_heuristic(lamda // 2, distance_matrix, fast=True, greedy=False))
         population.extend(init_monte_carlo(lamda - len(population), distance_matrix))
 
         for x in population:
@@ -708,7 +708,7 @@ class r0758170:
             assert_valid_tours(population)
 
             # Recalculate mean and best
-            mean_objective, best_solution = Candidate.stats(population, False)
+            mean_objective, best_solution = Candidate.stats(population, include_inf=False)
 
             # new_prob = (1 - (mean_objective - best_solution.fitness) / mean_objective) / 2
             # for x in itertools.chain(population):
