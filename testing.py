@@ -18,10 +18,10 @@ k = 5
 lamda = 10
 mu = 2
 
-exact = exact_solution(distance_matrix)
-print(exact)
-print(exact.fitness)
-# heur = heuristic_solution(distance_matrix, True, False)
-# heur.recalculate_fitness(distance_matrix)
-# # print(heur)
-# print(heur.fitness)
+pop = init_heuristic(20, distance_matrix, fast=True, greedy=True)
+a = pop[0]
+a.recalculate_fitness(distance_matrix)
+print(a.fitness)
+a.local_search(distance_matrix, 100)
+a.recalculate_fitness(distance_matrix)
+print(a.fitness)

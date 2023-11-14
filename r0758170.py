@@ -2,7 +2,6 @@ from __future__ import annotations
 import random as rd
 import itertools
 import sys
-from typing import Generator
 
 import math
 import numpy as np
@@ -19,28 +18,25 @@ class Candidate:
         candidates.sort(key=lambda x: x.fitness, reverse=reverse)
 
     @staticmethod
-    def stats(candidates: list[Candidate], include_inf=True) -> tuple[float, Candidate, float]:
+    def stats(candidates: list[Candidate], include_inf=True) -> tuple[float, Candidate]:
         """Return the mean fitness and best candidate from a list of candidates.
         If include_inf is False, then infinite values are ignored.
         """
         assert candidates != [], 'Cannot get stats of an empty list.'
         mean = 0.0
         best = candidates[0]
-        mean_mutation_prob = 0.0
         nr_included = 0
         for x in candidates:
             if not include_inf and x.fitness == math.inf:
                 continue
             mean += x.fitness
-            mean_mutation_prob += x.mutation_prob
             if x.fitness < best.fitness:
                 best = x
             nr_included += 1
         if nr_included == 0:
-            return 0.0, best, 0.0
+            return 0.0, best
         mean = mean / nr_included
-        mean_mutation_prob = mean_mutation_prob / nr_included
-        return mean, best, mean_mutation_prob
+        return mean, best
 
     def __init__(self, array: NDArray[int]):
         self.array = array
@@ -111,9 +107,9 @@ class Candidate:
             pass
         return offspring
 
-    def local_search(self, distance_matrix: NDArray[float]) -> None:
+    def local_search(self, distance_matrix: NDArray[float], *args) -> None:
         """Perform a local search."""
-        self.local_search_func(self, distance_matrix)
+        self.local_search_func(self, distance_matrix, *args)
 
     def recalculate_fitness(self, distance_matrix: NDArray[float]) -> None:
         """Recalculate the fitness."""
@@ -158,7 +154,7 @@ def mutate_insert(candidate: Candidate) -> None:
     candidate[first_pos + 1] = tmp
 
 
-def path_length(candidate: ArrayLike, distance_matrix: NDArray[float]) -> float:
+def path_length(candidate: Candidate | ArrayLike, distance_matrix: NDArray[float]) -> float:
     """Return the length of the path of candidate."""
     result = 0.0
     for i in range(len(candidate) - 1):
@@ -475,12 +471,8 @@ def exact_solution(distance_matrix: NDArray[float]) -> Candidate:
 
 def select_k_tournament(population: list[Candidate], k: int) -> Candidate:
     """Performs a k-tournament on the population. Returns the best candidate among k random samples."""
-    selected = rd.choice(population)
-    for _ in range(k - 1):
-        maybe = rd.choice(population)
-        if maybe.fitness < selected.fitness:
-            selected = maybe
-    return selected
+    tournament = rd.sample(population, k)
+    return min(tournament, key=lambda x: x.fitness)
 
 
 def select_top_k(population: list[Candidate], k: int) -> Candidate:
@@ -504,8 +496,8 @@ def elim_lambda_plus_mu_crowding(population: list[Candidate],
                                  crowding_factor: int) -> list[Candidate]:
     """Performs (lambda+mu)-elimination with a crowding strategy for diversity promotion.
     This crowding scheme is similar but not the same as the one shown in the lecture.
-    If the crowding_factor is 0, then this is the same as regular (lambda+mu)-elimination.
     """
+    assert crowding_factor >= 1, f'Crowding factor must be >= 1, got: {crowding_factor}'
     lamda = len(population)
     mu = len(offspring)
     assert (lamda + mu) % 2 == 0, \
@@ -516,17 +508,8 @@ def elim_lambda_plus_mu_crowding(population: list[Candidate],
     removed = []
     while len(new_population) < lamda and len(removed) < mu:
         choice = both[0]
-        most_similar = both[-1]  # If crowding_factor is 0, then remove worst as usual.
-        closest_dist = math.inf
-        for _ in range(crowding_factor):
-            sample = choice
-            while sample is choice:
-                sample = rd.choice(both)
-            dist = choice.distance(sample)
-            if dist < closest_dist:
-                closest_dist = dist
-                most_similar = sample
-        assert choice is not most_similar, "choice is most_similar, this can't be!"
+        samples = rd.sample(both[1:], crowding_factor)
+        most_similar = min(samples, key=lambda x: x.distance(choice))
         new_population.append(choice)
         removed.append(most_similar)
         both.remove(choice)
@@ -551,6 +534,7 @@ def elim_lambda_comma_mu_crowding(population: list[Candidate],
                                   offspring: list[Candidate],
                                   crowding_factor: int) -> list[Candidate]:
     """Performs (lambda,mu)-elimination with crowding for diversity promotion."""
+    assert crowding_factor >= 1, f'Crowding factor must be >= 1, got: {crowding_factor}'
     lamda = len(population)
     mu = len(offspring)
     assert 2 * lamda <= mu, \
@@ -559,16 +543,8 @@ def elim_lambda_comma_mu_crowding(population: list[Candidate],
     new_population = []
     for _ in range(lamda):
         choice = offspring[0]
-        most_similar = offspring[-1]
-        best_dist = math.inf
-        for _ in range(crowding_factor):
-            sample = choice
-            while sample is choice:
-                sample = rd.choice(offspring)
-            dist = choice.distance(sample)
-            if dist < best_dist:
-                best_dist = dist
-                most_similar = sample
+        samples = rd.sample(offspring[1:], crowding_factor)
+        most_similar = min(samples, key=lambda x: x.distance(choice))
         new_population.append(choice)
         offspring.remove(choice)
         offspring.remove(most_similar)
@@ -620,23 +596,24 @@ def local_search_insert(candidate: Candidate, distance_matrix: NDArray[float]) -
         candidate[:] = new_candidate[:]
 
 
-def local_search_inversion(candidate: Candidate, distance_matrix: NDArray[float], inv_length: int = 2) -> None:
-    """Performs a local search using one inversion, of inv_length elements.
+def local_search_inversion(candidate: Candidate, distance_matrix: NDArray[float], depth: int = 1) -> None:
+    """Performs a local search using one inversion of inv_length elements,
+    where inv_length increases from 2 to 2+depth.
     Candidate is updated in-place if a better candidate was found.
     """
-    assert 1 < inv_length < len(candidate), f'Got bad inversion length: {inv_length}'
     tmp = copy.deepcopy(candidate)
     new_candidate = copy.deepcopy(candidate)
     best_fit = candidate.fitness
-    for i in range(candidate.size - inv_length + 1):
-        tmp[i:i + inv_length] = np.flip(tmp.array[i:i + inv_length])
-        tmp.recalculate_fitness(distance_matrix)
-        if tmp.fitness < best_fit:
-            best_fit = tmp.fitness
-            new_candidate[:] = tmp[:]
-        tmp[i:i + inv_length] = np.flip(tmp.array[i:i + inv_length])
-    if best_fit < candidate.fitness:
-        candidate[:] = new_candidate[:]
+    for inv_length in range(2, depth + 2):
+        for i in range(candidate.size - inv_length + 1):
+            tmp[i:i + inv_length] = np.flip(tmp.array[i:i + inv_length])
+            tmp.recalculate_fitness(distance_matrix)
+            if tmp.fitness < best_fit:
+                best_fit = tmp.fitness
+                new_candidate[:] = tmp[:]
+            tmp[i:i + inv_length] = np.flip(tmp.array[i:i + inv_length])
+        if best_fit < candidate.fitness:
+            candidate[:] = new_candidate[:]
 
 
 def is_valid_tour(candidate: Candidate) -> bool:
@@ -694,7 +671,6 @@ class r0758170:
         assert_valid_tours(population)
 
         current_it = 1
-        best_solution = copy.deepcopy(population[0])
         while True:  # No stop condition other than time limit.
             offspring = []
 
@@ -732,11 +708,7 @@ class r0758170:
             assert_valid_tours(population)
 
             # Recalculate mean and best
-            mean_objective, current_best_solution, mean_mutation_prob = Candidate.stats(population, False)
-            # if current_best_solution.fitness < best_solution.fitness:
-            #     best_solution = copy.deepcopy(current_best_solution)
-            #
-            # assert is_valid_tour(best_solution)
+            mean_objective, best_solution = Candidate.stats(population, False)
 
             # new_prob = (1 - (mean_objective - best_solution.fitness) / mean_objective) / 2
             # for x in itertools.chain(population):
@@ -747,8 +719,8 @@ class r0758170:
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            print(f'{current_it:6} | mean: {mean_objective:10.2f} | best: {current_best_solution.fitness:10.2f}')
-            timeLeft = self.reporter.report(mean_objective, current_best_solution.fitness, current_best_solution.array)
+            print(f'{current_it:6} | mean: {mean_objective:10.2f} | best: {best_solution.fitness:10.2f}')
+            timeLeft = self.reporter.report(mean_objective, best_solution.fitness, best_solution.array)
             if timeLeft < 0:
                 break
             current_it += 1
