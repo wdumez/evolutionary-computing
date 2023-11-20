@@ -1,13 +1,16 @@
 from __future__ import annotations
-import random as rd
+
+import copy
 import itertools
+import random as rd
 import sys
+from turtle import distance
 
 import math
 import numpy as np
+from numpy.typing import NDArray
+
 import Reporter
-import copy
-from numpy.typing import NDArray, ArrayLike
 
 
 class Candidate:
@@ -16,6 +19,11 @@ class Candidate:
     def sort(candidates: list[Candidate], reverse=False) -> None:
         """Sort a list of candidates in-place according to their fitness."""
         candidates.sort(key=lambda x: x.fitness, reverse=reverse)
+
+    @staticmethod
+    def most_fit(candidates: list[Candidate]) -> Candidate:
+        """Return the most fit candidate."""
+        return min(candidates, key=lambda x: x.fitness)
 
     @staticmethod
     def stats(candidates: list[Candidate], include_inf=True) -> tuple[float, Candidate]:
@@ -34,20 +42,21 @@ class Candidate:
                 best = x
             nr_included += 1
         if nr_included == 0:
-            return 0.0, best
-        mean = mean / nr_included
+            mean = 0.0
+        else:
+            mean = mean / nr_included
         return mean, best
 
-    def __init__(self, array: NDArray[int]):
-        self.array = array
+    def __init__(self, tour: list[int]):
+        self.tour = tour
         self.fitness = 0.0
+        self.original_fitness = self.fitness
         self.nr_mutations = 1
-        self.mutation_prob = 0.20
         self.mutate_func = mutate_inversion
-        self.recombine_func = recombine_order_crossover
+        self.recombine_func = recombine_PMX
         self.local_search_func = local_search_inversion
         self.fitness_func = path_length
-        self.distance_func = Hamming_distance
+        self.distance_func = distance_hamming
         self.recombine_operators = [
             recombine_PMX,
             recombine_cycle_crossover,
@@ -61,130 +70,122 @@ class Candidate:
             mutate_insert
         ]
 
-    def __eq__(self, other):
-        return np.array_equal(self.array, other.array)
-
     def __repr__(self) -> str:
-        return str(self.array)
+        return str(self.tour)
 
     def __len__(self) -> int:
-        return len(self.array)
+        return len(self.tour)
 
     def __iter__(self):
-        return iter(self.array)
+        return iter(self.tour)
 
     def __getitem__(self, item):
-        return self.array[item]
+        return self.tour[item]
 
     def __setitem__(self, key, value):
-        self.array[key] = value
-
-    @property
-    def size(self):
-        return self.array.size
-
-    def shuffle(self):
-        """Shuffle self."""
-        np.random.shuffle(self.array)
-
-    def index(self, value: int) -> int:
-        """Return the first index where value appears."""
-        return int(np.where(self.array == value)[0][0])
+        self.tour[key] = value
 
     def mutate(self) -> None:
         """Mutate in-place self.nr_mutations times."""
         for _ in range(self.nr_mutations):
-            self.mutate_func(self)
+            self.mutate_func(self.tour)
         self.mutate_func = rd.choice(self.mutate_operators)
         self.recombine_func = rd.choice(self.recombine_operators)
 
     def recombine(self, other: Candidate) -> list[Candidate]:
         """Recombine with another parent to produce offspring."""
-        offspring = self.recombine_func(self, other)
+        offspring = [Candidate(x) for x in self.recombine_func(self.tour, other.tour)]
         for x in offspring:
             x.mutate_func = rd.choice([self.mutate_func, other.mutate_func])
             x.recombine_func = rd.choice([self.recombine_func, other.recombine_func])
-            pass
         return offspring
 
     def local_search(self, distance_matrix: NDArray[float], *args) -> None:
         """Perform a local search."""
+        # TODO Get rid of these "*args"
         self.local_search_func(self, distance_matrix, *args)
 
     def recalculate_fitness(self, distance_matrix: NDArray[float]) -> None:
         """Recalculate the fitness."""
-        self.fitness = self.fitness_func(self, distance_matrix)
+        self.fitness = self.fitness_func(self.tour, distance_matrix)
 
-    def distance(self, other_candidate: Candidate) -> float:
+    def distance(self, other: Candidate) -> float:
         """Return the distance to another candidate."""
-        return self.distance_func(self, other_candidate)
+        return self.distance_func(self.tour, other.tour)
+
+    def closest_to(self, others: list[Candidate]) -> Candidate:
+        """Returns the closest from others using the distance metric from self."""
+        return min(others, key=lambda x: self.distance(x))
+
+    def sigma_neighborhood(self, others: list[Candidate], sigma: float) -> list[Candidate]:
+        """Returns all candidates from others that are within sigma-distance from self."""
+        return [x for x in others if self.distance(x) <= sigma and x is not self]
 
 
-def mutate_inversion(candidate: Candidate) -> None:
+def mutate_inversion(tour: list[int]) -> None:
     """Mutate in-place using inversion mutation."""
-    first_pos = rd.randrange(0, candidate.size - 1)
-    second_pos = rd.randrange(first_pos + 1, candidate.size)
-    candidate[first_pos:second_pos + 1] = np.flip(candidate[first_pos:second_pos + 1])
+    first_pos = rd.randrange(0, len(tour) - 1)
+    second_pos = rd.randrange(first_pos + 1, len(tour))
+    tour[first_pos:second_pos + 1] = np.flip(tour[first_pos:second_pos + 1])
 
 
-def mutate_swap(candidate: Candidate) -> None:
+def mutate_swap(tour: list[int]) -> None:
     """Mutate in-place using swap mutation."""
-    first_pos = rd.randrange(0, candidate.size)
+    first_pos = rd.randrange(0, len(tour))
     second_pos = first_pos
     while second_pos == first_pos:
-        second_pos = rd.randrange(0, candidate.size)
-    tmp = candidate[first_pos]
-    candidate[first_pos] = candidate[second_pos]
-    candidate[second_pos] = tmp
+        second_pos = rd.randrange(0, len(tour))
+    tmp = tour[first_pos]
+    tour[first_pos] = tour[second_pos]
+    tour[second_pos] = tmp
 
 
-def mutate_scramble(candidate: Candidate) -> None:
+def mutate_scramble(tour: list[int]) -> None:
     """Mutate in-place using scramble mutation."""
-    first_pos = rd.randrange(0, candidate.size - 1)
-    second_pos = rd.randrange(first_pos + 1, candidate.size)
-    np.random.shuffle(candidate[first_pos:second_pos + 1])
+    first_pos = rd.randrange(0, len(tour) - 1)
+    second_pos = rd.randrange(first_pos + 1, len(tour))
+    np.random.shuffle(tour[first_pos:second_pos + 1])
 
 
-def mutate_insert(candidate: Candidate) -> None:
+def mutate_insert(tour: list[int]) -> None:
     """Mutate in-place using insert mutation."""
-    first_pos = rd.randrange(0, candidate.size - 1)
-    second_pos = rd.randrange(first_pos + 1, candidate.size)
-    tmp = candidate[second_pos]
-    candidate[first_pos + 2:second_pos + 1] = candidate[first_pos + 1:second_pos]
-    candidate[first_pos + 1] = tmp
+    first_pos = rd.randrange(0, len(tour) - 1)
+    second_pos = rd.randrange(first_pos + 1, len(tour))
+    tmp = tour[second_pos]
+    tour[first_pos + 2:second_pos + 1] = tour[first_pos + 1:second_pos]
+    tour[first_pos + 1] = tmp
 
 
-def path_length(candidate: Candidate | ArrayLike, distance_matrix: NDArray[float]) -> float:
-    """Return the length of the path of candidate."""
+def path_length(tour: list[int], distance_matrix: NDArray[float]) -> float:
+    """Return the length of a tour."""
     result = 0.0
-    for i in range(len(candidate) - 1):
+    for i in range(len(tour) - 1):
         # Order is important for the distance matrix.
-        result += distance_matrix[candidate[i]][candidate[i + 1]]
-    result += distance_matrix[candidate[len(candidate) - 1]][candidate[0]]
+        result += distance_matrix[tour[i]][tour[i + 1]]
+    result += distance_matrix[tour[len(tour) - 1]][tour[0]]
     return result
 
 
-def Hamming_distance(candidate1: Candidate, candidate2: Candidate) -> float:
-    """Return the distance between two candidates.
+def distance_hamming(tour1: list[int], tour2: list[int]) -> float:
+    """Return the distance between two tours.
     The distance is the nr. of elements that are different.
     """
-    # We must first align the candidates so that they start with the same element.
-    c1_aligned = copy.deepcopy(candidate1.array)
-    offset = np.where(candidate1.array == candidate2.array[0])[0][0]
-    c1_aligned = np.roll(c1_aligned, shift=-offset)
+    # We must first align the tours so that they start with the same element.
+    offset = tour2.index(tour1[0])
+    tour2_aligned = tour2[offset:] + tour2[:offset]
     dist = 0
-    for i in range(len(candidate1)):
-        if c1_aligned[i] != candidate2[i]:
+    for x, y in zip(tour1, tour2_aligned):
+        if x != y:
             dist += 1
     return float(dist)
 
 
-def recombine_copy(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
+def recombine_copy(parent1: list[int], parent2: list[int]) -> list[list[int]]:
     """Dummy recombine function which copies the parents into the offspring."""
     return [copy.deepcopy(parent1), copy.deepcopy(parent2)]
 
 
-def recombine_cycle_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
+def recombine_cycle_crossover(parent1: list[int], parent2: list[int]) -> list[list[int]]:
     """Use two parent candidates to produce two offspring using cycle crossover."""
     offspring1 = copy.deepcopy(parent1)
     offspring2 = copy.deepcopy(parent2)
@@ -201,7 +202,7 @@ def recombine_cycle_crossover(parent1: Candidate, parent2: Candidate) -> list[Ca
     return [offspring1, offspring2]
 
 
-def find_cycles(parent1: Candidate, parent2: Candidate) -> list[list[int]]:
+def find_cycles(parent1: list[int], parent2: list[int]) -> list[list[int]]:
     """Returns all cycles of the parents using indices."""
     unused_idx = list(range(len(parent1)))
     cycles = []
@@ -225,7 +226,7 @@ class NoNextElementException(Exception):
     """Exception used in edge crossover recombination."""
 
 
-def recombine_edge_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
+def recombine_edge_crossover(parent1: list[int], parent2: list[int]) -> list[list[int]]:
     """Use two parent candidates to produce two offspring using edge crossover.
     Since edge crossover only creates one offspring per recombination, the second
     offspring is the same.
@@ -234,31 +235,27 @@ def recombine_edge_crossover(parent1: Candidate, parent2: Candidate) -> list[Can
     edge_table = create_edge_table(parent1, parent2)
     remaining = list(range(len(parent1)))
     current_element = rd.choice(remaining)
-    offspring[0] = current_element
-    idx_off = 1
+    offspring = [current_element]
     remaining.remove(current_element)
     remove_references(edge_table, current_element)
     while len(remaining) != 0:
         try:
             current_element = pick_next_element(edge_table, current_element)
-            offspring[idx_off] = current_element
-            idx_off += 1
+            offspring.append(current_element)
             remaining.remove(current_element)
             remove_references(edge_table, current_element)
         except NoNextElementException:
             try:
                 next_element = pick_next_element(edge_table, offspring[0])
-                offspring.array = np.roll(offspring.array, shift=1)
-                offspring[0] = next_element
-                idx_off += 1
+                offspring.insert(0, next_element)
                 remaining.remove(next_element)
                 remove_references(edge_table, next_element)
             except NoNextElementException:
                 current_element = rd.choice(remaining)
-                offspring[idx_off] = current_element
-                idx_off += 1
+                offspring.append(current_element)
                 remaining.remove(current_element)
                 remove_references(edge_table, current_element)
+    assert_valid_tour(offspring)
     return [offspring, copy.deepcopy(offspring)]
 
 
@@ -296,12 +293,12 @@ def remove_references(edge_table: dict[int, list[tuple[int, bool]]], value: int)
                 break
 
 
-def create_edge_table(candidate1: Candidate, candidate2: Candidate) -> dict[int, list[tuple[int, bool]]]:
-    """Create an edge table for candidate1 and candidate2."""
-    edge_table = {x: [] for x in candidate1}
+def create_edge_table(tour1: list[int], tour2: list[int]) -> dict[int, list[tuple[int, bool]]]:
+    """Create an edge table for tour1 and tour2."""
+    edge_table = {x: [] for x in tour1}
     for x in edge_table:
-        adj_in_parent1 = get_adj(x, candidate1)
-        adj_in_parent2 = get_adj(x, candidate2)
+        adj_in_parent1 = get_adj(x, tour1)
+        adj_in_parent2 = get_adj(x, tour2)
         for y in adj_in_parent1:
             if y in adj_in_parent2:
                 edge_table[x].append((y, True))
@@ -313,23 +310,24 @@ def create_edge_table(candidate1: Candidate, candidate2: Candidate) -> dict[int,
     return edge_table
 
 
-def get_adj(x: int, candidate: Candidate) -> list[int]:
+def get_adj(x: int, candidate: list[int]) -> list[int]:
     """Returns the adjacent values of x in candidate as a list."""
     x_idx = candidate.index(x)
     prev_idx = x_idx - 1
-    next_idx = x_idx + 1 if x_idx < candidate.size - 1 else 0
+    next_idx = x_idx + 1 if x_idx < len(candidate) - 1 else 0
     return [int(candidate[prev_idx]), int(candidate[next_idx])]
 
 
-def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
+def recombine_PMX(parent1: list[int], parent2: list[int]) -> list[list[int]]:
     """Use two parent candidates to produce two offspring using partially mapped crossover."""
-    first_pos = rd.randrange(0, parent1.size - 1)
-    second_pos = rd.randrange(first_pos, parent1.size)
+    first_pos = rd.randrange(0, len(parent1) - 1)
+    second_pos = rd.randrange(first_pos, len(parent1))
     offspring = []
     for p1, p2 in [(parent1, parent2), (parent2, parent1)]:
         # We must initialize offspring with -1's, to identify whether a spot is not yet filled.
         off = copy.deepcopy(parent1)
-        off.array.fill(-1)
+        for i in range(len(off)):
+            off[i] = -1
 
         off[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
         for elem in p2[first_pos:second_pos + 1]:
@@ -342,40 +340,40 @@ def recombine_PMX(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
                 idx = p2.index(value)
                 value = off[idx]
             off[idx] = elem
-        for i in range(parent1.size):
+        for i in range(len(parent1)):
             if off[i] == -1:
                 off[i] = p2[i]
         offspring.append(off)
     return offspring
 
 
-def recombine_order_crossover(parent1: Candidate, parent2: Candidate) -> list[Candidate]:
+def recombine_order_crossover(parent1: list[int], parent2: list[int]) -> list[list[int]]:
     """Use two parent candidates to produce two offspring using order crossover."""
-    first_pos = rd.randrange(0, parent1.size - 1)
-    second_pos = rd.randrange(first_pos, parent1.size)
+    first_pos = rd.randrange(0, len(parent1) - 1)
+    second_pos = rd.randrange(first_pos, len(parent1))
     offspring = []
     for p1, p2 in [(parent1, parent2), (parent2, parent1)]:
         off = copy.deepcopy(parent1)
         off[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
         # Now copy the remaining values of p2 into off, starting from second_pos.
-        idx_p2 = second_pos + 1 if second_pos < parent1.size - 1 else 0
+        idx_p2 = second_pos + 1 if second_pos < len(parent1) - 1 else 0
         idx_off = idx_p2
         while idx_off != first_pos:
             if p2[idx_p2] not in off[first_pos:second_pos + 1]:
                 off[idx_off] = p2[idx_p2]
-                idx_off = 0 if idx_off + 1 >= parent1.size else idx_off + 1
-            idx_p2 = 0 if idx_p2 + 1 >= parent1.size else idx_p2 + 1
+                idx_off = 0 if idx_off + 1 >= len(parent1) else idx_off + 1
+            idx_p2 = 0 if idx_p2 + 1 >= len(parent1) else idx_p2 + 1
         offspring.append(off)
     return offspring
 
 
 def init_monte_carlo(size: int, distance_matrix: NDArray[float]) -> list[Candidate]:
     """Initializes the population at random."""
-    sample = Candidate(np.array(list(range(len(distance_matrix))), dtype=int))
+    sample = list(range(len(distance_matrix)))
     population = []
     for i in range(size):
-        sample.shuffle()
-        population.append(copy.deepcopy(sample))
+        rd.shuffle(sample)
+        population.append(Candidate(copy.deepcopy(sample)))
     return population
 
 
@@ -385,11 +383,11 @@ def init_heuristic(size: int, distance_matrix: NDArray[float],
     population = []
     for i in range(size):
         candidate = heuristic_solution(distance_matrix, fast, greedy)
-        population.append(candidate)
+        population.append(Candidate(candidate))
     return population
 
 
-def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greedy: bool = True) -> Candidate:
+def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greedy: bool = True) -> list[int]:
     """Uses a greedy heuristic to find a solution.
     If fast is True, then it returns the first found solution using a random starting position.
     If fast is False, then it tries all starting positions and returns the best found solution.
@@ -415,7 +413,7 @@ def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greed
             if fast:
                 break
     results.sort(key=lambda x: path_length(x, distance_matrix))
-    candidate = Candidate(np.array(results[0], dtype=int))
+    candidate = results[0]
 
     sys.setrecursionlimit(recursion_limit)
     return candidate
@@ -452,27 +450,39 @@ def heuristic_recursive(choices: list[int], current_result: list[int],
     return False
 
 
-def exact_solution(distance_matrix: NDArray[float]) -> Candidate:
-    """Finds the exact solution by trying all options.
-    Obviously only feasible for small problems, because the runtime is O(n!).
-    """
-    base = list(range(len(distance_matrix)))
-    best_fit = math.inf
-    solution = base
-    for tour in itertools.permutations(base):
-        fit = path_length(tour, distance_matrix)
-        if fit < best_fit:
-            best_fit = fit
-            solution = copy.deepcopy(tour)
-    candidate = Candidate(np.array(solution, dtype=int))
-    candidate.recalculate_fitness(distance_matrix)
-    return candidate
-
-
-def select_k_tournament(population: list[Candidate], k: int) -> Candidate:
+def select_k_tournament(population: list[Candidate], k: int, nr_times: int = 1) -> list[Candidate]:
     """Performs a k-tournament on the population. Returns the best candidate among k random samples."""
-    tournament = rd.sample(population, k)
-    return min(tournament, key=lambda x: x.fitness)
+    selected = []
+    for _ in range(nr_times):
+        tournament = rd.sample(population, k)
+        selected.append(Candidate.most_fit(tournament))
+    return selected
+
+
+def select_k_tournament_fitness_sharing(population: list[Candidate],
+                                        k: int,
+                                        nr_times: int = 1,
+                                        sigma: float = 5.0,
+                                        alpha: float = 1.0) -> list[Candidate]:
+    """Performs a k-tournament on the population with fitness sharing."""
+    selected = []
+    for _ in range(nr_times):
+        tournament = []
+        for _ in range(k):
+            sample = rd.choice(population)
+            while sample in tournament:  # Sample without replacement.
+                sample = rd.choice(population)
+            if sample.fitness != math.inf:
+                sample.original_fitness = sample.fitness
+                neighbors = sample.sigma_neighborhood(population, sigma)
+                for neighbor in neighbors:
+                    penalty_term = math.pow((1 - (sample.distance(neighbor) / sigma)), alpha)
+                    sample.fitness += sample.original_fitness * penalty_term
+            tournament.append(sample)
+        selected.append(Candidate.most_fit(tournament))
+        for x in tournament:
+            x.fitness = x.original_fitness
+    return selected
 
 
 def select_top_k(population: list[Candidate], k: int) -> Candidate:
@@ -497,7 +507,6 @@ def elim_lambda_plus_mu_crowding(population: list[Candidate],
     """Performs (lambda+mu)-elimination with a crowding strategy for diversity promotion.
     This crowding scheme is similar but not the same as the one shown in the lecture.
     """
-    assert crowding_factor >= 1, f'Crowding factor must be >= 1, got: {crowding_factor}'
     lamda = len(population)
     mu = len(offspring)
     assert (lamda + mu) % 2 == 0, \
@@ -506,17 +515,64 @@ def elim_lambda_plus_mu_crowding(population: list[Candidate],
     Candidate.sort(both)
     new_population = []
     removed = []
-    while len(new_population) < lamda and len(removed) < mu:
+    while len(both) != 0:
         choice = both[0]
-        samples = rd.sample(both[1:], crowding_factor)
-        most_similar = min(samples, key=lambda x: x.distance(choice))
+        if len(both[1:]) > crowding_factor:
+            samples = rd.sample(both[1:], crowding_factor)
+        else:
+            samples = both[1:]
+        if len(samples) == 0:
+            most_similar = both[-1]
+        else:
+            most_similar = choice.closest_to(samples)
         new_population.append(choice)
-        removed.append(most_similar)
         both.remove(choice)
         both.remove(most_similar)
-    if len(new_population) < lamda:
-        new_population.extend(both)
+        if len(new_population) + len(both) == lamda:
+            break
+    new_population.extend(both)
+    return new_population[:lamda]
+
+
+def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
+                                        offspring: list[Candidate],
+                                        alpha: float = 1.0,
+                                        sigma: float = 5.0) -> list[Candidate]:
+    """Performs (lambda+mu)-elimination with fitness sharing for diversity promotion.
+    The sign(f(x)) is always 1 for the Traveling Salesman Problem.
+    This implementation has been optimized to update incrementally.
+    """
+    lamda = len(population)
+    population.extend(offspring)
+    Candidate.sort(population)
+    for x in population:
+        x.original_fitness = x.fitness
+    new_population = []
+    while len(new_population) != lamda:
+        choice = population.pop(0)
+        neighbors = []
+        for neighbor in choice.sigma_neighborhood(population, sigma):
+            if neighbor.fitness != math.inf:
+                penalty_term = math.pow((1 - (choice.distance(neighbor) / sigma)), alpha)
+                neighbor.fitness += neighbor.original_fitness * penalty_term
+            neighbors.append(neighbor)
+            population.remove(neighbor)  # Temporarily remove this neighbor from the population.
+        # Now insert the neighbors back into the population to maintain its sortedness.
+        for neighbor in neighbors:
+            population = insert_sorted(population, neighbor)
+        new_population.append(choice)
     return new_population
+
+
+def insert_sorted(population: list[Candidate], candidate: Candidate) -> list[Candidate]:
+    """Insert candidate into a sorted population such that the new population is still sorted.
+    Returns the new population.
+    """
+    for i, x in enumerate(population):
+        if candidate.fitness <= x.fitness:
+            population.insert(i, candidate)
+            break
+    return population
 
 
 def elim_lambda_comma_mu(population: list[Candidate],
@@ -544,7 +600,7 @@ def elim_lambda_comma_mu_crowding(population: list[Candidate],
     for _ in range(lamda):
         choice = offspring[0]
         samples = rd.sample(offspring[1:], crowding_factor)
-        most_similar = min(samples, key=lambda x: x.distance(choice))
+        most_similar = choice.closest_to(samples)
         new_population.append(choice)
         offspring.remove(choice)
         offspring.remove(most_similar)
@@ -567,12 +623,7 @@ def elim_k_tournament(population: list[Candidate],
     """Performs k-tournament elimination. Returns the new population."""
     lamda = len(population)
     population.extend(offspring)
-    new_population = []
-    for _ in range(lamda):
-        sample = select_k_tournament(population, k)
-        new_population.append(sample)
-        population.remove(sample)
-    return new_population
+    return select_k_tournament(population, k, lamda)
 
 
 def local_search_insert(candidate: Candidate, distance_matrix: NDArray[float]) -> None:
@@ -605,35 +656,35 @@ def local_search_inversion(candidate: Candidate, distance_matrix: NDArray[float]
     new_candidate = copy.deepcopy(candidate)
     best_fit = candidate.fitness
     for inv_length in range(2, depth + 2):
-        for i in range(candidate.size - inv_length + 1):
-            tmp[i:i + inv_length] = np.flip(tmp.array[i:i + inv_length])
+        for i in range(len(candidate) - inv_length + 1):
+            tmp[i:i + inv_length] = np.flip(tmp.tour[i:i + inv_length])
             tmp.recalculate_fitness(distance_matrix)
             if tmp.fitness < best_fit:
                 best_fit = tmp.fitness
                 new_candidate[:] = tmp[:]
-            tmp[i:i + inv_length] = np.flip(tmp.array[i:i + inv_length])
+            tmp[i:i + inv_length] = np.flip(tmp.tour[i:i + inv_length])
         if best_fit < candidate.fitness:
             candidate[:] = new_candidate[:]
 
 
-def is_valid_tour(candidate: Candidate) -> bool:
+def is_valid_tour(tour: list[int]) -> bool:
     """Returns True if the candidate represents a valid tour, False otherwise.
     A tour is valid if every city appears in it exactly once. Note that it does
     not matter whether the length of the tour is infinite in this test.
     """
-    present = np.zeros(len(candidate), dtype=bool)
-    for x in candidate:
+    present = np.zeros(len(tour), dtype=bool)
+    for x in tour:
         present[x] = True
     return np.all(present)
 
 
-def assert_valid_tour(candidate: Candidate):
-    assert is_valid_tour(candidate), f'Got invalid tour: {candidate}'
+def assert_valid_tour(tour: list[int]):
+    assert is_valid_tour(tour), f'Got invalid tour: {tour}'
 
 
 def assert_valid_tours(candidates: list[Candidate]):
     for x in candidates:
-        assert_valid_tour(x)
+        assert_valid_tour(x.tour)
 
 
 class r0758170:
@@ -648,22 +699,32 @@ class r0758170:
         distance_matrix = np.loadtxt(file, delimiter=",")
         file.close()
 
+        # seed = 3
+        # rd.seed(seed)
+        # np.random.seed(seed)
+
         # Parameters
         # TODO These should eventually be moved into the Candidate class,
         #      so they can be used for self-adaptivity.
-        k_selection = 5
+        k_selection = 3
         k_elimination = 5
+        mutation_prob = 0.10
         crowding_factor = 10
-        lamda = 100
-        mu = 40
+        lamda = 60
+        mu = int(1.5 * lamda)
+        seed_fraction = 0.05
+        alpha = 1.0
+        sigma = len(distance_matrix) // 10
+
+        assert mu % 2 == 0, f'Mu must be even, got: {mu}'
 
         # Initialization
 
         # Seeding:
         population = []
-        population.extend(init_heuristic(1, distance_matrix, fast=True, greedy=True))
-        population.extend(init_heuristic(lamda // 2, distance_matrix, fast=True, greedy=False))
-        population.extend(init_monte_carlo(lamda - len(population), distance_matrix))
+        population.extend(init_heuristic(math.ceil(lamda * seed_fraction), distance_matrix, fast=True, greedy=True))
+        population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greedy=False))
+        # population.extend(init_monte_carlo(lamda - len(population), distance_matrix))
 
         for x in population:
             x.recalculate_fitness(distance_matrix)
@@ -671,13 +732,18 @@ class r0758170:
         assert_valid_tours(population)
 
         current_it = 1
-        while True:  # No stop condition other than time limit.
+        max_it = 300
+        while current_it <= max_it:
             offspring = []
 
-            # Selection and recombination
-            for i in range(0, mu, 2):
-                p1 = select_k_tournament(population, k_selection)
-                p2 = select_k_tournament(population, k_selection)
+            # Selection
+            selected = select_k_tournament(population, k_selection, mu)
+            # selected = select_k_tournament_fitness_sharing(population, k_selection, mu)
+
+            # Recombination
+            it = iter(selected)
+            for p1 in it:
+                p2 = next(it)
                 new_offspring = p1.recombine(p2)
                 for x in new_offspring:
                     x.recalculate_fitness(distance_matrix)
@@ -688,19 +754,24 @@ class r0758170:
             assert_valid_tours(population)
             assert_valid_tours(offspring)
 
-            # Local search & Mutation
-            for x in itertools.chain(offspring):
-                if rd.random() < x.mutation_prob:
+            # Mutation & Local search
+            for x in offspring:
+                if rd.random() < mutation_prob:
                     x.mutate()
-                    x.local_search(distance_matrix)
                     x.recalculate_fitness(distance_matrix)
+                    # x.local_search(distance_matrix, 2)
+                    # x.recalculate_fitness(distance_matrix)
 
             assert_valid_tours(population)
             assert_valid_tours(offspring)
 
+            for x in population:
+                x.recalculate_fitness(distance_matrix)
+
             # Elimination
             # population = elim_lambda_plus_mu(population, offspring)
-            population = elim_lambda_plus_mu_crowding(population, offspring, crowding_factor)
+            # population = elim_lambda_plus_mu_crowding(population, offspring, crowding_factor)
+            population = elim_lambda_plus_mu_fitness_sharing(population, offspring, alpha, sigma)
             # population = elim_lambda_comma_mu(population, offspring)
             # population = elim_lambda_comma_mu_crowding(population, offspring, crowding_factor)
             # population = elim_k_tournament(population, offspring, k_elimination)
@@ -710,19 +781,19 @@ class r0758170:
             # Recalculate mean and best
             mean_objective, best_solution = Candidate.stats(population, include_inf=False)
 
-            # new_prob = (1 - (mean_objective - best_solution.fitness) / mean_objective) / 2
-            # for x in itertools.chain(population):
-            #     x.mutation_prob = new_prob
-
             # Call the reporter with:
             #  - the mean objective function value of the population
             #  - the best objective function value of the population
             #  - a 1D numpy array in the cycle notation containing the best solution
             #    with city numbering starting from 0
-            print(f'{current_it:6} | mean: {mean_objective:10.2f} | best: {best_solution.fitness:10.2f}')
-            timeLeft = self.reporter.report(mean_objective, best_solution.fitness, best_solution.array)
+            timeLeft = self.reporter.report(mean_objective, best_solution.fitness,
+                                            np.array(best_solution.tour, dtype=int))
+            print(f'{timeLeft:5.1f} sec | '
+                  f'{current_it:6} | '
+                  f'mean: {mean_objective:10.2f} | '
+                  f'best: {best_solution.fitness:10.2f}')
+            current_it += 1
             if timeLeft < 0:
                 break
-            current_it += 1
-
+        print('Done')
         return 0

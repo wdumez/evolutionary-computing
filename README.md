@@ -47,5 +47,14 @@
   sure that the best solution (`population[0]`) _does not_ mutate.
 - I've been testing, and reading up online. Actually, Python lists are faster than numpy arrays for most things. Numpy
   arrays are only faster for vector operations, like matrix multiplication and dot products and such. Heck, even the
-  accessing is O(1). So maybe I should be using lists again?
-
+  accessing is O(1). So maybe I should be using lists again? -> Yes!
+- Without local search, even tour1000 becomes not-painfully-slow. So I think it's best just to not use it, and instead
+  do a more powerful seeding of the initial population.
+- Edge crossover is _really_ slow compared to the other operators.
+- fitness sharing in both selection and elimination works well; but using both is quite performance impacting. Probably
+  best to use only elimination, and offset the lower diversity promotion with a lower selective pressure.
+- Inspecting the mutate_func and recombine_func of the candidates after 300 iterations showed that, even when starting
+  with inversion and PMX, swap and order became the most common. This implies that swap and order are the best variation
+  operators. Also, it shows that this self-adaptivity, though simple, really works well and there is no point not using
+  it. It also doesn't really matter with which operators you start, though I would recommend not starting with edge
+  crossover because the first iterations will be painfully slow.
