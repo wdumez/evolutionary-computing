@@ -381,15 +381,18 @@ def recombine_order_crossover(parent1: list[int], parent2: list[int]) -> list[li
     return offspring
 
 
-def local_search(candidate: Candidate, distance_matrix: NDArray[float]) -> None:
+def local_search(candidate: Candidate, distance_matrix: NDArray[float], skip_prob: float = 0.99) -> None:
     """Perform a local search on candidate.
     It gets updated in-place if a better fitness was found.
+    Each possible swap has skip_prob probability of being skipped.
     """
     best_fit = candidate.fitness
     tmp = copy.deepcopy(candidate)
     changed = False
     for first_pos in range(len(candidate) - 1):
         for second_pos in range(first_pos, len(candidate)):
+            if rd.random() < skip_prob:
+                continue
             x = tmp[first_pos]
             tmp[first_pos] = tmp[second_pos]
             tmp[second_pos] = x
@@ -664,8 +667,8 @@ class r0758170:
         mu = int(1.5 * lamda)
         seed_fraction = 0.01
         nr_seeds = math.ceil(lamda * seed_fraction)
-        alpha = 0.5
-        sigma = len(distance_matrix) // 5
+        alpha = 0.25
+        sigma = len(distance_matrix) // 2
 
         assert mu % 2 == 0, f'Mu must be even, got: {mu}'
 
@@ -710,8 +713,7 @@ class r0758170:
                 if rd.random() < mutation_prob:
                     x.mutate()
                     x.recalculate_fitness(distance_matrix)
-                    # x.local_search(distance_matrix, 2)
-                    # x.recalculate_fitness(distance_matrix)
+                    x.local_search(distance_matrix)
 
             assert_valid_tours(population)
             assert_valid_tours(offspring)
