@@ -421,7 +421,7 @@ def init_monte_carlo(size: int, distance_matrix: NDArray[float]) -> list[Candida
 
 
 def init_heuristic(size: int, distance_matrix: NDArray[float],
-                   fast: bool = True, greedy: bool = True) -> list[Candidate]:
+                   fast: bool = True, greedy: float = 0.5) -> list[Candidate]:
     """Initializes the population with a heuristic."""
     population = []
     for i in range(size):
@@ -431,12 +431,13 @@ def init_heuristic(size: int, distance_matrix: NDArray[float],
 
 
 # TODO Update with parameter of greediness: 0-1 instead of T/F.
-def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greedy: bool = True) -> list[int]:
+def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greedy: float = 0.5) -> list[int]:
     """Uses a greedy heuristic to find a solution.
     If fast is True, then it returns the first found solution using a random starting position.
     If fast is False, then it tries all starting positions and returns the best found solution.
-    If greedy is True, then it takes the greedy position each step.
-    If greedy is False, then it takes a random step that does not lead to infinite length.
+    greedy is a value between 0 and 1 which indicates the probability of taking the greedy next
+    step instead of a random next step. In the case of a random step, it is still guaranteed that
+    the total fitness is not infinite.
     """
     # We need to temporarily up the recursion limit because the nr. of recursions is just
     # slightly higher than the problem size (e.g. tour200 recurses 200-210 times).
@@ -465,7 +466,7 @@ def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greed
 
 def heuristic_recursive(choices: list[int], current_result: list[int],
                         distance_matrix: NDArray[float],
-                        greedy: bool = True) -> list[int] | bool:
+                        greedy: float = 0.5) -> list[int] | bool:
     """Recursive function used in heuristic_solution."""
     if len(choices) == 0:
         if distance_matrix[current_result[-1]][current_result[0]] == math.inf:
@@ -474,8 +475,10 @@ def heuristic_recursive(choices: list[int], current_result: list[int],
         # All edges are valid, so the answer has been found.
         return current_result
 
-    if greedy:
+    if rd.random() < greedy:
         choices.sort(key=lambda x: distance_matrix[current_result[-1]][x])
+    else:
+        rd.shuffle(choices)
 
     for choice in choices:
         if distance_matrix[current_result[-1]][choice] == math.inf:
@@ -681,7 +684,7 @@ class r0758170:
         # Seeding:
         population = []
         # population.extend(init_heuristic(nr_seeds, distance_matrix, fast=True, greedy=True))
-        population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greedy=False))
+        population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greedy=0.5))
         # population.extend(init_monte_carlo(lamda - len(population), distance_matrix))
 
         for x in population:
