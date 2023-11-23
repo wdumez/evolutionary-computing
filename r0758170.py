@@ -54,7 +54,7 @@ class Candidate:
         self.nr_mutations = 1
         self.mutate_func = mutate_inversion
         self.recombine_func = recombine_PMX
-        self.local_search_func = local_search_inversion
+        self.local_search_func = None
         self.fitness_func = path_length
         self.distance_func = distance_hamming
         self.recombine_operators = [
@@ -100,10 +100,10 @@ class Candidate:
             x.recombine_func = rd.choice([self.recombine_func, other.recombine_func])
         return offspring
 
-    def local_search(self, distance_matrix: NDArray[float], *args) -> None:
+    def local_search(self, distance_matrix: NDArray[float]) -> None:
         """Perform a local search."""
-        # TODO Get rid of these "*args"
-        self.local_search_func(self, distance_matrix, *args)
+        print('No local search implemented!')
+        # self.local_search_func(self, distance_matrix)
 
     def recalculate_fitness(self, distance_matrix: NDArray[float]) -> None:
         """Recalculate the fitness."""
@@ -624,47 +624,6 @@ def elim_k_tournament(population: list[Candidate],
     lamda = len(population)
     population.extend(offspring)
     return select_k_tournament(population, k, lamda)
-
-
-def local_search_insert(candidate: Candidate, distance_matrix: NDArray[float]) -> None:
-    """Performs a 1-opt local search using one insertion.
-    Candidate is updated in-place if a better candidate was found.
-    """
-    tmp = copy.deepcopy(candidate)
-    new_candidate = copy.deepcopy(candidate)
-    best_fit = candidate.fitness
-    for i in range(1, len(candidate)):
-        x = tmp[i]
-        tmp[1: i + 1] = tmp[:i]
-        tmp[0] = x
-        tmp.recalculate_fitness(distance_matrix)
-        if tmp.fitness < best_fit:
-            best_fit = tmp.fitness
-            new_candidate[:] = tmp[:]
-        tmp[:i] = tmp[1:i + 1]
-        tmp[i] = x
-    if best_fit < candidate.fitness:
-        candidate[:] = new_candidate[:]
-
-
-def local_search_inversion(candidate: Candidate, distance_matrix: NDArray[float], depth: int = 1) -> None:
-    """Performs a local search using one inversion of inv_length elements,
-    where inv_length increases from 2 to 2+depth.
-    Candidate is updated in-place if a better candidate was found.
-    """
-    tmp = copy.deepcopy(candidate)
-    new_candidate = copy.deepcopy(candidate)
-    best_fit = candidate.fitness
-    for inv_length in range(2, depth + 2):
-        for i in range(len(candidate) - inv_length + 1):
-            tmp[i:i + inv_length] = np.flip(tmp.tour[i:i + inv_length])
-            tmp.recalculate_fitness(distance_matrix)
-            if tmp.fitness < best_fit:
-                best_fit = tmp.fitness
-                new_candidate[:] = tmp[:]
-            tmp[i:i + inv_length] = np.flip(tmp.tour[i:i + inv_length])
-        if best_fit < candidate.fitness:
-            candidate[:] = new_candidate[:]
 
 
 def is_valid_tour(tour: list[int]) -> bool:
