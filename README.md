@@ -61,3 +61,5 @@
 - Alpha > 1 does not seem to work very well.
 - Be truthful about how you did the hyperparameter search? I mean, it was kind of just trying things that felt good and
   seeing how they worked...
+- Self-adaptivity for alpha and sigma does not make sense, because of course the best solutions will want a less diverse
+  population in order for them to more likely stay in the population.

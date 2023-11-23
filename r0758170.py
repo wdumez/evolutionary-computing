@@ -1,6 +1,7 @@
 from __future__ import annotations
 import functools
 import copy
+import itertools
 import random as rd
 import sys
 
@@ -53,6 +54,7 @@ class Candidate:
         self.mutate_func = mutate_inversion
         self.recombine_func = recombine_edge_crossover
         self.local_search_func = local_search
+        self.local_search_skip_prob = 0.99
         self.fitness_func = path_length
         self.distance_func = distance_edges_cached
         self.recombine_operators = [
@@ -92,8 +94,10 @@ class Candidate:
 
     def recombine(self, other: Candidate) -> list[Candidate]:
         """Recombine with another parent to produce offspring."""
-        offspring = [Candidate(x) for x in self.recombine_func(self.tour, other.tour)]
-        for x in offspring:
+        offspring_tours = [x for x in self.recombine_func(self.tour, other.tour)]
+        offspring = [copy.deepcopy(self), copy.deepcopy(other)]
+        for x, tour in zip(offspring, offspring_tours):
+            x.tour = tour
             x.mutate_func = rd.choice([self.mutate_func, other.mutate_func])
             x.recombine_func = rd.choice([self.recombine_func, other.recombine_func])
         return offspring
@@ -381,7 +385,7 @@ def recombine_order_crossover(parent1: list[int], parent2: list[int]) -> list[li
     return offspring
 
 
-def local_search(candidate: Candidate, distance_matrix: NDArray[float], skip_prob: float = 0.99) -> None:
+def local_search(candidate: Candidate, distance_matrix: NDArray[float]) -> None:
     """Perform a local search on candidate.
     It gets updated in-place if a better fitness was found.
     Each possible swap has skip_prob probability of being skipped.
@@ -391,7 +395,7 @@ def local_search(candidate: Candidate, distance_matrix: NDArray[float], skip_pro
     changed = False
     for first_pos in range(len(candidate) - 1):
         for second_pos in range(first_pos, len(candidate)):
-            if rd.random() < skip_prob:
+            if rd.random() < candidate.local_search_skip_prob:
                 continue
             x = tmp[first_pos]
             tmp[first_pos] = tmp[second_pos]
@@ -667,8 +671,8 @@ class r0758170:
         mu = int(1.5 * lamda)
         seed_fraction = 0.01
         nr_seeds = math.ceil(lamda * seed_fraction)
-        alpha = 0.25
-        sigma = len(distance_matrix) // 2
+        alpha = 0.50
+        sigma = math.ceil(len(distance_matrix) * 0.20)
 
         assert mu % 2 == 0, f'Mu must be even, got: {mu}'
 
@@ -686,8 +690,8 @@ class r0758170:
         assert_valid_tours(population)
 
         current_it = 1
-        max_it = 300
-        while current_it <= max_it:
+        max_it = 300  # Set to 0 for no limit
+        while current_it != max_it:
             offspring = []
 
             # Selection
@@ -717,9 +721,6 @@ class r0758170:
 
             assert_valid_tours(population)
             assert_valid_tours(offspring)
-
-            # for x in population:
-            #     x.recalculate_fitness(distance_matrix)
 
             # Elimination
             # population = elim_lambda_plus_mu(population, offspring)

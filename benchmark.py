@@ -1,9 +1,22 @@
 import os
 
 import r0758170
+import matplotlib.pyplot as plt
+import visualize
 
-for benchmark_nr in range(1, 5 + 1):
-    filename = "./tour200.csv"
+start_nr = 1
+nr_benchmarks = 5
+
+for benchmark_nr in range(start_nr, start_nr + nr_benchmarks + 1):
+    problem = 'tour200'
+    filename = f'./{problem}.csv'
+    benchmark_filename = f'benchmark_{problem}_{benchmark_nr:03}'
+
     a = r0758170.r0758170()
     a.optimize(filename)
-    os.system(f'cp ./r0758170.csv ./benchmark/benchmark_{benchmark_nr:03}.csv')
+
+    os.system(f'cp ./r0758170.csv ./benchmark/{benchmark_filename}.csv')
+
+    g = visualize.plot(f'./benchmark/{benchmark_filename}.csv')
+    plt.savefig(f'./benchmark/{benchmark_filename}.png')
+    plt.close()

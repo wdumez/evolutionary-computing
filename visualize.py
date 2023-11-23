@@ -20,10 +20,16 @@ def preprocess(filename):
                        skiprows=1, header=0, skipinitialspace=True)
 
 
-df = preprocess('./r0758170.csv')
-df = pd.melt(df, ['Elapsed time'], var_name='Objective', value_name='Fitness')
-g = sns.lineplot(df, x='Elapsed time', y='Fitness', hue='Objective')
-g.set_title('TSP')
-g.set_xlabel('Elapsed time (sec)')
-g.set_ylabel('Fitness (tour length)')
-plt.show()
+def plot(filename: str = './r0758170.csv'):
+    df = preprocess(filename)
+    df = pd.melt(df, ['Elapsed time'], var_name='Objective', value_name='Fitness')
+    g = sns.lineplot(df, x='Elapsed time', y='Fitness', hue='Objective')
+    g.set_title('Traveling salesman problem')
+    g.set_xlabel('Elapsed time (sec)')
+    g.set_ylabel('Fitness (tour length)')
+    return g
+
+
+if __name__ == '__main__':
+    _ = plot()
+    plt.show()
