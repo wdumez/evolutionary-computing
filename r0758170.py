@@ -541,6 +541,7 @@ def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
     """Performs (lambda+mu)-elimination with fitness sharing for diversity promotion.
     The sign(f(x)) is always 1 for the Traveling Salesman Problem.
     This implementation has been optimized to update incrementally.
+    The fitness values of candidates are only changed temporarily.
     """
     lamda = len(population)
     population.extend(offspring)
@@ -561,6 +562,9 @@ def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
         for neighbor in neighbors:
             population = insert_sorted(population, neighbor)
         new_population.append(choice)
+    # We can restore the fitness here.
+    for x in new_population:
+        x.fitness = x.original_fitness
     return new_population
 
 
@@ -584,27 +588,6 @@ def elim_lambda_comma_mu(population: list[Candidate],
         f'(lambda,mu)-elimination requires lambda <= mu, got: {lamda} > {mu}'
     Candidate.sort(offspring)
     return offspring[:lamda]
-
-
-def elim_lambda_comma_mu_crowding(population: list[Candidate],
-                                  offspring: list[Candidate],
-                                  crowding_factor: int) -> list[Candidate]:
-    """Performs (lambda,mu)-elimination with crowding for diversity promotion."""
-    assert crowding_factor >= 1, f'Crowding factor must be >= 1, got: {crowding_factor}'
-    lamda = len(population)
-    mu = len(offspring)
-    assert 2 * lamda <= mu, \
-        f'(lambda,mu)-elimination with crowding requires 2*lambda <= mu, got: {2 * lamda} > {mu}'
-    Candidate.sort(offspring)
-    new_population = []
-    for _ in range(lamda):
-        choice = offspring[0]
-        samples = rd.sample(offspring[1:], crowding_factor)
-        most_similar = choice.closest_to(samples)
-        new_population.append(choice)
-        offspring.remove(choice)
-        offspring.remove(most_similar)
-    return new_population
 
 
 def elim_age_based(population: list[Candidate],
@@ -668,10 +651,10 @@ class r0758170:
         k_selection = 3
         k_elimination = 5
         mutation_prob = 0.10
-        crowding_factor = 10
         lamda = 60
         mu = int(1.5 * lamda)
         seed_fraction = 0.05
+        nr_seeds = math.ceil(lamda * seed_fraction)
         alpha = 1.0
         sigma = len(distance_matrix) // 10
 
@@ -681,7 +664,7 @@ class r0758170:
 
         # Seeding:
         population = []
-        population.extend(init_heuristic(math.ceil(lamda * seed_fraction), distance_matrix, fast=True, greedy=True))
+        population.extend(init_heuristic(nr_seeds, distance_matrix, fast=True, greedy=True))
         population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greedy=False))
         # population.extend(init_monte_carlo(lamda - len(population), distance_matrix))
 
@@ -724,15 +707,13 @@ class r0758170:
             assert_valid_tours(population)
             assert_valid_tours(offspring)
 
-            for x in population:
-                x.recalculate_fitness(distance_matrix)
+            # for x in population:
+            #     x.recalculate_fitness(distance_matrix)
 
             # Elimination
             # population = elim_lambda_plus_mu(population, offspring)
-            # population = elim_lambda_plus_mu_crowding(population, offspring, crowding_factor)
             population = elim_lambda_plus_mu_fitness_sharing(population, offspring, alpha, sigma)
             # population = elim_lambda_comma_mu(population, offspring)
-            # population = elim_lambda_comma_mu_crowding(population, offspring, crowding_factor)
             # population = elim_k_tournament(population, offspring, k_elimination)
 
             assert_valid_tours(population)
