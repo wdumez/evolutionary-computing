@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import copy
-import itertools
 import random as rd
 import sys
-from turtle import distance
 
 import math
 import numpy as np
@@ -53,7 +51,7 @@ class Candidate:
         self.original_fitness = self.fitness
         self.nr_mutations = 1
         self.mutate_func = mutate_inversion
-        self.recombine_func = recombine_PMX
+        self.recombine_func = recombine_edge_crossover
         self.local_search_func = None
         self.fitness_func = path_length
         self.distance_func = distance_hamming
@@ -231,7 +229,6 @@ def recombine_edge_crossover(parent1: list[int], parent2: list[int]) -> list[lis
     Since edge crossover only creates one offspring per recombination, the second
     offspring is the same.
     """
-    offspring = copy.deepcopy(parent1)
     edge_table = create_edge_table(parent1, parent2)
     remaining = list(range(len(parent1)))
     current_element = rd.choice(remaining)
@@ -499,39 +496,6 @@ def elim_lambda_plus_mu(population: list[Candidate],
     population.extend(offspring)
     Candidate.sort(population)
     return population[:lamda]
-
-
-def elim_lambda_plus_mu_crowding(population: list[Candidate],
-                                 offspring: list[Candidate],
-                                 crowding_factor: int) -> list[Candidate]:
-    """Performs (lambda+mu)-elimination with a crowding strategy for diversity promotion.
-    This crowding scheme is similar but not the same as the one shown in the lecture.
-    """
-    lamda = len(population)
-    mu = len(offspring)
-    assert (lamda + mu) % 2 == 0, \
-        f'(lamda+mu)-elimination with crowding requires lamda + mu to be even, got: {lamda} + {mu}.'
-    both = [x for x in itertools.chain(population, offspring)]
-    Candidate.sort(both)
-    new_population = []
-    removed = []
-    while len(both) != 0:
-        choice = both[0]
-        if len(both[1:]) > crowding_factor:
-            samples = rd.sample(both[1:], crowding_factor)
-        else:
-            samples = both[1:]
-        if len(samples) == 0:
-            most_similar = both[-1]
-        else:
-            most_similar = choice.closest_to(samples)
-        new_population.append(choice)
-        both.remove(choice)
-        both.remove(most_similar)
-        if len(new_population) + len(both) == lamda:
-            break
-    new_population.extend(both)
-    return new_population[:lamda]
 
 
 def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
