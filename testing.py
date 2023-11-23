@@ -14,5 +14,7 @@ mu = 2
 
 a = [0, 1, 2, 3, 4]
 b = [1, 2, 0, 4, 3]
-dist = distance_hamming(a, b)
+c = [0, 4, 1, 2, 3]
+d = [4, 3, 2, 1, 0]
+dist = distance_edges(a, a)
 print(dist)

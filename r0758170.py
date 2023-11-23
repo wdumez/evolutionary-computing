@@ -54,7 +54,7 @@ class Candidate:
         self.recombine_func = recombine_edge_crossover
         self.local_search_func = None
         self.fitness_func = path_length
-        self.distance_func = distance_hamming
+        self.distance_func = distance_edges
         self.recombine_operators = [
             recombine_PMX,
             recombine_cycle_crossover,
@@ -164,18 +164,29 @@ def path_length(tour: list[int], distance_matrix: NDArray[float]) -> float:
     return result
 
 
-def distance_hamming(tour1: list[int], tour2: list[int]) -> float:
+def distance_edges(tour1: list[int], tour2: list[int]) -> float:
     """Return the distance between two tours.
-    The distance is the nr. of elements that are different.
+    The distance is the nr. of edges that are different.
     """
-    # We must first align the tours so that they start with the same element.
-    offset = tour2.index(tour1[0])
-    tour2_aligned = tour2[offset:] + tour2[:offset]
-    dist = 0
-    for x, y in zip(tour1, tour2_aligned):
-        if x != y:
-            dist += 1
+    dist = len(tour1)
+    # By sorting the lists ahead of time we
+    # hopefully have to search less deep in the loop.
+    edges1 = sorted(get_edges(tour1))
+    edges2 = sorted(get_edges(tour2))
+    for edge in edges1:
+        if edge in edges2:
+            dist -= 1
+            continue
     return float(dist)
+
+
+def get_edges(tour: list[int]) -> list[tuple[int, int]]:
+    """Return all edges of the tour."""
+    edges = []
+    for i in range(len(tour) - 1):
+        edges.append((tour[i], tour[i + 1]))
+    edges.append((tour[-1], tour[0]))
+    return edges
 
 
 def recombine_copy(parent1: list[int], parent2: list[int]) -> list[list[int]]:
