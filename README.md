@@ -58,3 +58,4 @@
   operators. Also, it shows that this self-adaptivity, though simple, really works well and there is no point not using
   it. It also doesn't really matter with which operators you start, though I would recommend not starting with edge
   crossover because the first iterations will be painfully slow.
+- Alpha > 1 does not seem to work very well.

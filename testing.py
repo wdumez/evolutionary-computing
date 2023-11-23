@@ -12,9 +12,24 @@ k = 5
 lamda = 10
 mu = 2
 
-a = [0, 1, 2, 3, 4]
-b = [1, 2, 0, 4, 3]
-c = [0, 4, 1, 2, 3]
-d = [4, 3, 2, 1, 0]
-dist = distance_edges(a, a)
-print(dist)
+
+def insert_sorted(lst, x):
+    """Insert candidate into a sorted population such that the new population is still sorted.
+    Returns the new population.
+    """
+    if len(lst) == 0:
+        return [x]
+    b = False
+    for i, y in enumerate(lst):
+        if x <= y:
+            lst.insert(i, x)
+            b = True
+            break
+    if not b:
+        lst.append(x)
+    return lst
+
+
+a = [1, 3, 5, 7, 9]
+b = insert_sorted(a, 10)
+print(b)

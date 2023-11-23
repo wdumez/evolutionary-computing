@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import functools
 import copy
 import random as rd
 import sys
@@ -52,9 +52,9 @@ class Candidate:
         self.nr_mutations = 1
         self.mutate_func = mutate_inversion
         self.recombine_func = recombine_edge_crossover
-        self.local_search_func = None
+        self.local_search_func = local_search
         self.fitness_func = path_length
-        self.distance_func = distance_edges
+        self.distance_func = distance_edges_cached
         self.recombine_operators = [
             recombine_PMX,
             recombine_cycle_crossover,
@@ -100,8 +100,7 @@ class Candidate:
 
     def local_search(self, distance_matrix: NDArray[float]) -> None:
         """Perform a local search."""
-        print('No local search implemented!')
-        # self.local_search_func(self, distance_matrix)
+        self.local_search_func(self, distance_matrix)
 
     def recalculate_fitness(self, distance_matrix: NDArray[float]) -> None:
         """Recalculate the fitness."""
@@ -109,7 +108,7 @@ class Candidate:
 
     def distance(self, other: Candidate) -> float:
         """Return the distance to another candidate."""
-        return self.distance_func(self.tour, other.tour)
+        return self.distance_func(tuple(self.tour), tuple(other.tour))
 
     def closest_to(self, others: list[Candidate]) -> Candidate:
         """Returns the closest from others using the distance metric from self."""
@@ -168,25 +167,32 @@ def distance_edges(tour1: list[int], tour2: list[int]) -> float:
     """Return the distance between two tours.
     The distance is the nr. of edges that are different.
     """
-    dist = len(tour1)
-    # By sorting the lists ahead of time we
-    # hopefully have to search less deep in the loop.
-    edges1 = sorted(get_edges(tour1))
-    edges2 = sorted(get_edges(tour2))
-    for edge in edges1:
-        if edge in edges2:
-            dist -= 1
-            continue
-    return float(dist)
+    edges1 = get_edges_cached(tuple(tour1))
+    edges2 = get_edges_cached(tuple(tour2))
+    return float(len(edges1 - edges2))
 
 
-def get_edges(tour: list[int]) -> list[tuple[int, int]]:
+@functools.cache
+def distance_edges_cached(tour1: tuple[int], tour2: tuple[int]) -> float:
+    """Memoized version of distance_edges.
+    The arguments are now tuples because they must be immutable.
+    """
+    return distance_edges(list(tour1), list(tour2))
+
+
+def get_edges(tour: list[int]) -> set[tuple[int, int]]:
     """Return all edges of the tour."""
     edges = []
     for i in range(len(tour) - 1):
         edges.append((tour[i], tour[i + 1]))
     edges.append((tour[-1], tour[0]))
-    return edges
+    return set(edges)
+
+
+@functools.cache
+def get_edges_cached(tour: tuple[int]) -> set[tuple[int, int]]:
+    """Memoized version of get_edges."""
+    return get_edges(list(tour))
 
 
 def recombine_copy(parent1: list[int], parent2: list[int]) -> list[list[int]]:
@@ -375,6 +381,28 @@ def recombine_order_crossover(parent1: list[int], parent2: list[int]) -> list[li
     return offspring
 
 
+def local_search(candidate: Candidate, distance_matrix: NDArray[float]) -> None:
+    """Perform a local search on candidate.
+    It gets updated in-place if a better fitness was found.
+    """
+    best_fit = candidate.fitness
+    tmp = copy.deepcopy(candidate)
+    changed = False
+    for first_pos in range(len(candidate) - 1):
+        for second_pos in range(first_pos, len(candidate)):
+            x = tmp[first_pos]
+            tmp[first_pos] = tmp[second_pos]
+            tmp[second_pos] = x
+            tmp.recalculate_fitness(distance_matrix)
+            if tmp.fitness < best_fit:
+                candidate.tour = copy.deepcopy(tmp.tour)
+                changed = True
+            tmp[second_pos] = tmp[first_pos]
+            tmp[first_pos] = x
+    if changed:
+        candidate.recalculate_fitness(distance_matrix)
+
+
 def init_monte_carlo(size: int, distance_matrix: NDArray[float]) -> list[Candidate]:
     """Initializes the population at random."""
     sample = list(range(len(distance_matrix)))
@@ -395,6 +423,7 @@ def init_heuristic(size: int, distance_matrix: NDArray[float],
     return population
 
 
+# TODO Update with parameter of greediness: 0-1 instead of T/F.
 def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greedy: bool = True) -> list[int]:
     """Uses a greedy heuristic to find a solution.
     If fast is True, then it returns the first found solution using a random starting position.
@@ -547,10 +576,16 @@ def insert_sorted(population: list[Candidate], candidate: Candidate) -> list[Can
     """Insert candidate into a sorted population such that the new population is still sorted.
     Returns the new population.
     """
+    if len(population) == 0:
+        return [candidate]
+    inserted = False
     for i, x in enumerate(population):
         if candidate.fitness <= x.fitness:
             population.insert(i, candidate)
+            inserted = True
             break
+    if not inserted:
+        population.append(candidate)
     return population
 
 
@@ -627,10 +662,10 @@ class r0758170:
         mutation_prob = 0.10
         lamda = 60
         mu = int(1.5 * lamda)
-        seed_fraction = 0.05
+        seed_fraction = 0.01
         nr_seeds = math.ceil(lamda * seed_fraction)
-        alpha = 1.0
-        sigma = len(distance_matrix) // 10
+        alpha = 0.5
+        sigma = len(distance_matrix) // 5
 
         assert mu % 2 == 0, f'Mu must be even, got: {mu}'
 
@@ -638,7 +673,7 @@ class r0758170:
 
         # Seeding:
         population = []
-        population.extend(init_heuristic(nr_seeds, distance_matrix, fast=True, greedy=True))
+        # population.extend(init_heuristic(nr_seeds, distance_matrix, fast=True, greedy=True))
         population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greedy=False))
         # population.extend(init_monte_carlo(lamda - len(population), distance_matrix))
 
