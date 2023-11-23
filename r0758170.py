@@ -648,8 +648,7 @@ class r0758170:
         # Parameters
         # TODO These should eventually be moved into the Candidate class,
         #      so they can be used for self-adaptivity.
-        k_selection = 3
-        k_elimination = 5
+        k = 3
         mutation_prob = 0.10
         lamda = 60
         mu = int(1.5 * lamda)
@@ -679,8 +678,8 @@ class r0758170:
             offspring = []
 
             # Selection
-            selected = select_k_tournament(population, k_selection, mu)
-            # selected = select_k_tournament_fitness_sharing(population, k_selection, mu)
+            selected = select_k_tournament(population, k, mu)
+            # selected = select_k_tournament_fitness_sharing(population, k, mu)
 
             # Recombination
             it = iter(selected)
@@ -714,7 +713,7 @@ class r0758170:
             # population = elim_lambda_plus_mu(population, offspring)
             population = elim_lambda_plus_mu_fitness_sharing(population, offspring, alpha, sigma)
             # population = elim_lambda_comma_mu(population, offspring)
-            # population = elim_k_tournament(population, offspring, k_elimination)
+            # population = elim_k_tournament(population, offspring, k)
 
             assert_valid_tours(population)
 
