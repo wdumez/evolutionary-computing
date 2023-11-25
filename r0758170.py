@@ -4,7 +4,7 @@ import copy
 import itertools
 import random as rd
 import sys
-
+import objgraph
 import math
 import numpy as np
 from numpy.typing import NDArray
@@ -13,6 +13,18 @@ import Reporter
 
 
 class Candidate:
+
+    @staticmethod
+    def avg_distance(candidates: list[Candidate]) -> float:
+        """Return the average distance of one candidate to all other candidates."""
+        counter = 0
+        avg_dist = 0.0
+        for i in range(len(candidates)):
+            for j in range(i + 1, len(candidates)):
+                avg_dist += candidates[i].distance(candidates[j])
+                counter += 1
+        avg_dist = avg_dist / counter
+        return avg_dist
 
     @staticmethod
     def sort(candidates: list[Candidate], reverse=False) -> None:
@@ -50,11 +62,10 @@ class Candidate:
         self.tour = tour
         self.fitness = 0.0
         self.original_fitness = self.fitness
-        self.nr_mutations = 1
         self.mutate_func = mutate_inversion
         self.recombine_func = recombine_edge_crossover
         self.local_search_func = local_search
-        self.local_search_skip_prob = 0.99
+        self.local_search_prob = 0.01
         self.fitness_func = path_length
         self.distance_func = distance_edges_cached
         self.recombine_operators = [
@@ -86,9 +97,8 @@ class Candidate:
         self.tour[key] = value
 
     def mutate(self) -> None:
-        """Mutate in-place self.nr_mutations times."""
-        for _ in range(self.nr_mutations):
-            self.mutate_func(self.tour)
+        """Mutate self in-place."""
+        self.tour = self.mutate_func(self.tour)
         self.mutate_func = rd.choice(self.mutate_operators)
         self.recombine_func = rd.choice(self.recombine_operators)
 
@@ -110,9 +120,9 @@ class Candidate:
         """Recalculate the fitness."""
         self.fitness = self.fitness_func(self.tour, distance_matrix)
 
-    def distance(self, other: Candidate) -> float:
+    def distance(self, to: Candidate) -> float:
         """Return the distance to another candidate."""
-        return self.distance_func(tuple(self.tour), tuple(other.tour))
+        return self.distance_func(self.tour, to.tour)
 
     def closest_to(self, others: list[Candidate]) -> Candidate:
         """Returns the closest from others using the distance metric from self."""
@@ -123,15 +133,16 @@ class Candidate:
         return [x for x in others if self.distance(x) <= sigma and x is not self]
 
 
-def mutate_inversion(tour: list[int]) -> None:
-    """Mutate in-place using inversion mutation."""
+def mutate_inversion(tour: list[int]) -> list[int]:
+    """Mutate a tour using inversion mutation."""
     first_pos = rd.randrange(0, len(tour) - 1)
     second_pos = rd.randrange(first_pos + 1, len(tour))
     tour[first_pos:second_pos + 1] = np.flip(tour[first_pos:second_pos + 1])
+    return tour
 
 
-def mutate_swap(tour: list[int]) -> None:
-    """Mutate in-place using swap mutation."""
+def mutate_swap(tour: list[int]) -> list[int]:
+    """Mutate a tour using swap mutation."""
     first_pos = rd.randrange(0, len(tour))
     second_pos = first_pos
     while second_pos == first_pos:
@@ -139,22 +150,25 @@ def mutate_swap(tour: list[int]) -> None:
     tmp = tour[first_pos]
     tour[first_pos] = tour[second_pos]
     tour[second_pos] = tmp
+    return tour
 
 
-def mutate_scramble(tour: list[int]) -> None:
-    """Mutate in-place using scramble mutation."""
+def mutate_scramble(tour: list[int]) -> list[int]:
+    """Mutate a tour using scramble mutation."""
     first_pos = rd.randrange(0, len(tour) - 1)
     second_pos = rd.randrange(first_pos + 1, len(tour))
-    np.random.shuffle(tour[first_pos:second_pos + 1])
+    rd.shuffle(tour[first_pos:second_pos + 1])
+    return tour
 
 
-def mutate_insert(tour: list[int]) -> None:
-    """Mutate in-place using insert mutation."""
+def mutate_insert(tour: list[int]) -> list[int]:
+    """Mutate a tour using insert mutation."""
     first_pos = rd.randrange(0, len(tour) - 1)
     second_pos = rd.randrange(first_pos + 1, len(tour))
     tmp = tour[second_pos]
     tour[first_pos + 2:second_pos + 1] = tour[first_pos + 1:second_pos]
     tour[first_pos + 1] = tmp
+    return tour
 
 
 def path_length(tour: list[int], distance_matrix: NDArray[float]) -> float:
@@ -171,21 +185,13 @@ def distance_edges(tour1: list[int], tour2: list[int]) -> float:
     """Return the distance between two tours.
     The distance is the nr. of edges that are different.
     """
-    edges1 = get_edges_cached(tuple(tour1))
-    edges2 = get_edges_cached(tuple(tour2))
+    edges1 = get_edges(tour1)
+    edges2 = get_edges(tour2)
     return float(len(edges1 - edges2))
 
 
-@functools.cache
-def distance_edges_cached(tour1: tuple[int], tour2: tuple[int]) -> float:
-    """Memoized version of distance_edges.
-    The arguments are now tuples because they must be immutable.
-    """
-    return distance_edges(list(tour1), list(tour2))
-
-
 def get_edges(tour: list[int]) -> set[tuple[int, int]]:
-    """Return all edges of the tour."""
+    """Return all edges of the tour in a set."""
     edges = []
     for i in range(len(tour) - 1):
         edges.append((tour[i], tour[i + 1]))
@@ -193,10 +199,23 @@ def get_edges(tour: list[int]) -> set[tuple[int, int]]:
     return set(edges)
 
 
-@functools.cache
+@functools.lru_cache(maxsize=1000)
 def get_edges_cached(tour: tuple[int]) -> set[tuple[int, int]]:
-    """Memoized version of get_edges."""
+    """Memoized version of get_edges. The tour must now be a tuple because it must be immutable. """
+
     return get_edges(list(tour))
+
+
+def distance_edges_cached(tour1: list[int], tour2: list[int]) -> float:
+    """Memoized version of distance_edges."""
+
+    @functools.lru_cache(maxsize=1000)
+    def _distance_edges_cached(tour1_: tuple[int], tour2_: tuple[int]) -> float:
+        edges1 = get_edges_cached(tour1_)
+        edges2 = get_edges_cached(tour2_)
+        return float(len(edges1 - edges2))
+
+    return _distance_edges_cached(tuple(tour1), tuple(tour2))
 
 
 def recombine_copy(parent1: list[int], parent2: list[int]) -> list[list[int]]:
@@ -388,15 +407,12 @@ def recombine_order_crossover(parent1: list[int], parent2: list[int]) -> list[li
 def local_search(candidate: Candidate, distance_matrix: NDArray[float]) -> None:
     """Perform a local search on candidate.
     It gets updated in-place if a better fitness was found.
-    Each possible swap has skip_prob probability of being skipped.
     """
     best_fit = candidate.fitness
     tmp = copy.deepcopy(candidate)
     changed = False
     for first_pos in range(len(candidate) - 1):
         for second_pos in range(first_pos, len(candidate)):
-            if rd.random() < candidate.local_search_skip_prob:
-                continue
             x = tmp[first_pos]
             tmp[first_pos] = tmp[second_pos]
             tmp[second_pos] = x
@@ -430,7 +446,6 @@ def init_heuristic(size: int, distance_matrix: NDArray[float],
     return population
 
 
-# TODO Update with parameter of greediness: 0-1 instead of T/F.
 def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greedy: float = 0.5) -> list[int]:
     """Uses a greedy heuristic to find a solution.
     If fast is True, then it returns the first found solution using a random starting position.
@@ -504,39 +519,6 @@ def select_k_tournament(population: list[Candidate], k: int, nr_times: int = 1) 
         tournament = rd.sample(population, k)
         selected.append(Candidate.most_fit(tournament))
     return selected
-
-
-def select_k_tournament_fitness_sharing(population: list[Candidate],
-                                        k: int,
-                                        nr_times: int = 1,
-                                        sigma: float = 5.0,
-                                        alpha: float = 1.0) -> list[Candidate]:
-    """Performs a k-tournament on the population with fitness sharing."""
-    selected = []
-    for _ in range(nr_times):
-        tournament = []
-        for _ in range(k):
-            sample = rd.choice(population)
-            while sample in tournament:  # Sample without replacement.
-                sample = rd.choice(population)
-            if sample.fitness != math.inf:
-                sample.original_fitness = sample.fitness
-                neighbors = sample.sigma_neighborhood(population, sigma)
-                for neighbor in neighbors:
-                    penalty_term = math.pow((1 - (sample.distance(neighbor) / sigma)), alpha)
-                    sample.fitness += sample.original_fitness * penalty_term
-            tournament.append(sample)
-        selected.append(Candidate.most_fit(tournament))
-        for x in tournament:
-            x.fitness = x.original_fitness
-    return selected
-
-
-def select_top_k(population: list[Candidate], k: int) -> Candidate:
-    """Performs top-k selection on the population. Returns a random candidate among the k best candidates.
-    """
-    Candidate.sort(population)
-    return rd.choice(population[:k])
 
 
 def elim_lambda_plus_mu(population: list[Candidate],
@@ -668,14 +650,13 @@ class r0758170:
         # Parameters
         # TODO These should eventually be moved into the Candidate class,
         #      so they can be used for self-adaptivity.
-        k = 3
+        k = 5
         mutation_prob = 0.10
-        lamda = 60
-        mu = int(1.5 * lamda)
-        seed_fraction = 0.01
-        nr_seeds = math.ceil(lamda * seed_fraction)
-        alpha = 0.50
-        sigma = math.ceil(len(distance_matrix) * 0.20)
+        lamda = 70
+        mu = int(1.0 * lamda)
+        greedy = 0.65  # TODO Let greediness go up like 0 0.2 0.4 0.6 0.8 1.0 ?
+        alpha = 1.0  # TODO Play with alpha! Apparently it's more important than sigma...
+        sigma = math.ceil(len(distance_matrix) * 0.25)
 
         assert mu % 2 == 0, f'Mu must be even, got: {mu}'
 
@@ -683,8 +664,7 @@ class r0758170:
 
         # Seeding:
         population = []
-        # population.extend(init_heuristic(nr_seeds, distance_matrix, fast=True, greedy=True))
-        population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greedy=0.5))
+        population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greedy=greedy))
         # population.extend(init_monte_carlo(lamda - len(population), distance_matrix))
 
         for x in population:
@@ -694,7 +674,7 @@ class r0758170:
 
         current_it = 1
         max_it = 300  # Set to 0 for no limit
-        while current_it != max_it:
+        while current_it != max_it + 1:
             offspring = []
 
             # Selection
@@ -716,11 +696,12 @@ class r0758170:
             assert_valid_tours(offspring)
 
             # Mutation & Local search
-            for x in offspring:
+            for x in itertools.chain(population, offspring):
                 if rd.random() < mutation_prob:
                     x.mutate()
                     x.recalculate_fitness(distance_matrix)
-                    x.local_search(distance_matrix)
+                # if rd.random() < x.local_search_prob:
+                #     x.local_search(distance_matrix)
 
             assert_valid_tours(population)
             assert_valid_tours(offspring)
@@ -735,6 +716,7 @@ class r0758170:
 
             # Recalculate mean and best
             mean_objective, best_solution = Candidate.stats(population, include_inf=False)
+            avg_dist = Candidate.avg_distance(population)
 
             # Call the reporter with:
             #  - the mean objective function value of the population
@@ -746,7 +728,10 @@ class r0758170:
             print(f'{timeLeft:5.1f} sec | '
                   f'{current_it:6} | '
                   f'mean: {mean_objective:10.2f} | '
-                  f'best: {best_solution.fitness:10.2f}')
+                  f'best: {best_solution.fitness:10.2f} | '
+                  f'avg dist: {avg_dist:.2f}')
+
+            # objgraph.show_most_common_types()
             current_it += 1
             if timeLeft < 0:
                 break

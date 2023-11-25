@@ -63,3 +63,4 @@
   seeing how they worked...
 - Self-adaptivity for alpha and sigma does not make sense, because of course the best solutions will want a less diverse
   population in order for them to more likely stay in the population.
+- Alpha = 0.5 and sigma = len(distance_matrix) * 0.5 seem to do pretty well, at least for small sizes.
