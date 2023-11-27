@@ -7,11 +7,8 @@ from r0758170 import *
 with open('./tour50.csv') as file:
     distance_matrix = np.loadtxt(file, delimiter=",")
 
-pop = init_heuristic(10, distance_matrix, fast=True, greedy=0.80)
-for x in pop:
-    x.recalculate_fitness(distance_matrix)
-
-c = pop[0]
-print(c)
-c.mutate()
-print(c)
+pop = init_heuristic(1, distance_matrix, fast=False, greedy=1.0)
+print(pop[0].fitness)
+pop[0].mutate()
+pop[0].recalculate_fitness(distance_matrix)
+print(pop[0].fitness)

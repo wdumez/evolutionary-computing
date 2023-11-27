@@ -2,12 +2,12 @@
 
 ## Targets
 
-- tour50: simple greedy heuristic 27723
-- tour100: simple greedy heuristic 90851
-- tour200: simple greedy heuristic 39745
-- tour500: simple greedy heuristic 157034
-- tour750: simple greedy heuristic 197541
-- tour1000: simple greedy heuristic 195848
+- tour50: simple greedy heuristic 27723 | 55446
+- tour100: simple greedy heuristic 90851 | 181702
+- tour200: simple greedy heuristic 39745 | 79490
+- tour500: simple greedy heuristic 157034 | 314058
+- tour750: simple greedy heuristic 197541 | 395082
+- tour1000: simple greedy heuristic 195848 | 391696
 
 Fill-in sheet:
 
