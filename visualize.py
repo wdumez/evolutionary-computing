@@ -5,8 +5,10 @@ import pandas as pd
 import seaborn as sns
 
 
-def preprocess(filename):
+def preprocess(filename) -> tuple[pd.DataFrame, int]:
     """Reads in the data with preprocessing applied."""
+    df = pd.read_csv(filename, skiprows=2, header=0, skipinitialspace=True)
+    problem_size = df.shape[1] - 5
     new_file = ''
     with open(filename, 'r') as file:
         for i, line in enumerate(file.readlines()):
@@ -14,17 +16,19 @@ def preprocess(filename):
                 new_file += line
                 continue
             words = line.split(',')
-            words = words[1:4]
+            words = words[0:4]
             new_file += ','.join(words) + '\n'
     return pd.read_csv(StringIO(new_file),
-                       skiprows=1, header=0, skipinitialspace=True)
+                       skiprows=1, header=0, skipinitialspace=True), problem_size
 
 
 def plot(filename: str = './r0758170.csv'):
-    df = preprocess(filename)
-    df = pd.melt(df, ['Elapsed time'], var_name='Objective', value_name='Fitness')
+    df, problem_size = preprocess(filename)
+    nr_iterations = len(df)
+    final_best_fit = float(df['Best value'].iloc[-1])
+    df = pd.melt(df, ['Elapsed time', '# Iteration'], var_name='Objective', value_name='Fitness')
     g = sns.lineplot(df, x='Elapsed time', y='Fitness', hue='Objective')
-    g.set_title('Traveling salesman problem')
+    g.set_title(f'Size: {problem_size} | Iterations: {nr_iterations} | Best fitness: {final_best_fit:.2f}')
     g.set_xlabel('Elapsed time (sec)')
     g.set_ylabel('Fitness (tour length)')
     return g

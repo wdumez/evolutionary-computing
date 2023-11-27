@@ -62,7 +62,7 @@ class Candidate:
         self.tour = tour
         self.fitness = 0.0
         self.original_fitness = self.fitness
-        self.mutate_func = mutate_inversion
+        self.mutate_func = mutate_swap
         self.recombine_func = recombine_edge_crossover
         self.local_search_func = local_search
         self.local_search_prob = 0.01
@@ -99,8 +99,8 @@ class Candidate:
     def mutate(self) -> None:
         """Mutate self in-place."""
         self.tour = self.mutate_func(self.tour)
-        self.mutate_func = rd.choice(self.mutate_operators)
-        self.recombine_func = rd.choice(self.recombine_operators)
+        # self.mutate_func = rd.choice(self.mutate_operators)
+        # self.recombine_func = rd.choice(self.recombine_operators)
 
     def recombine(self, other: Candidate) -> list[Candidate]:
         """Recombine with another parent to produce offspring."""
@@ -108,8 +108,8 @@ class Candidate:
         offspring = [copy.deepcopy(self), copy.deepcopy(other)]
         for x, tour in zip(offspring, offspring_tours):
             x.tour = tour
-            x.mutate_func = rd.choice([self.mutate_func, other.mutate_func])
-            x.recombine_func = rd.choice([self.recombine_func, other.recombine_func])
+            # x.mutate_func = rd.choice([self.mutate_func, other.mutate_func])
+            # x.recombine_func = rd.choice([self.recombine_func, other.recombine_func])
         return offspring
 
     def local_search(self, distance_matrix: NDArray[float]) -> None:
@@ -201,8 +201,7 @@ def get_edges(tour: list[int]) -> set[tuple[int, int]]:
 
 @functools.lru_cache(maxsize=1000)
 def get_edges_cached(tour: tuple[int]) -> set[tuple[int, int]]:
-    """Memoized version of get_edges. The tour must now be a tuple because it must be immutable. """
-
+    """Memoized version of get_edges. The tour is now a tuple because it must be immutable. """
     return get_edges(list(tour))
 
 
@@ -219,12 +218,12 @@ def distance_edges_cached(tour1: list[int], tour2: list[int]) -> float:
 
 
 def recombine_copy(parent1: list[int], parent2: list[int]) -> list[list[int]]:
-    """Dummy recombine function which copies the parents into the offspring."""
+    """Dummy recombine function which copies the parent tours into the offspring."""
     return [copy.deepcopy(parent1), copy.deepcopy(parent2)]
 
 
 def recombine_cycle_crossover(parent1: list[int], parent2: list[int]) -> list[list[int]]:
-    """Use two parent candidates to produce two offspring using cycle crossover."""
+    """Use two parent tours to produce two offspring tours using cycle crossover."""
     offspring1 = copy.deepcopy(parent1)
     offspring2 = copy.deepcopy(parent2)
     cycles = find_cycles(parent1, parent2)
@@ -240,9 +239,9 @@ def recombine_cycle_crossover(parent1: list[int], parent2: list[int]) -> list[li
     return [offspring1, offspring2]
 
 
-def find_cycles(parent1: list[int], parent2: list[int]) -> list[list[int]]:
-    """Returns all cycles of the parents using indices."""
-    unused_idx = list(range(len(parent1)))
+def find_cycles(tour1: list[int], tour2: list[int]) -> list[list[int]]:
+    """Returns all cycles of the two tours using indices."""
+    unused_idx = list(range(len(tour1)))
     cycles = []
     while len(unused_idx) != 0:
         start_idx = unused_idx[0]
@@ -250,8 +249,8 @@ def find_cycles(parent1: list[int], parent2: list[int]) -> list[list[int]]:
         unused_idx.remove(current_idx)
         cycle = [current_idx]
         while True:
-            value_p2 = parent2[current_idx]
-            current_idx = parent1.index(value_p2)
+            value_p2 = tour2[current_idx]
+            current_idx = tour1.index(value_p2)
             if current_idx == start_idx:
                 break
             unused_idx.remove(current_idx)
@@ -265,7 +264,7 @@ class NoNextElementException(Exception):
 
 
 def recombine_edge_crossover(parent1: list[int], parent2: list[int]) -> list[list[int]]:
-    """Use two parent candidates to produce two offspring using edge crossover.
+    """Use two parent tours to produce two offspring tours using edge crossover.
     Since edge crossover only creates one offspring per recombination, the second
     offspring is the same.
     """
@@ -331,7 +330,7 @@ def remove_references(edge_table: dict[int, list[tuple[int, bool]]], value: int)
 
 
 def create_edge_table(tour1: list[int], tour2: list[int]) -> dict[int, list[tuple[int, bool]]]:
-    """Create an edge table for tour1 and tour2."""
+    """Create an edge table for two tours."""
     edge_table = {x: [] for x in tour1}
     for x in edge_table:
         adj_in_parent1 = get_adj(x, tour1)
@@ -347,16 +346,16 @@ def create_edge_table(tour1: list[int], tour2: list[int]) -> dict[int, list[tupl
     return edge_table
 
 
-def get_adj(x: int, candidate: list[int]) -> list[int]:
-    """Returns the adjacent values of x in candidate as a list."""
-    x_idx = candidate.index(x)
+def get_adj(x: int, tour: list[int]) -> list[int]:
+    """Returns the adjacent values of x in the tour as a list."""
+    x_idx = tour.index(x)
     prev_idx = x_idx - 1
-    next_idx = x_idx + 1 if x_idx < len(candidate) - 1 else 0
-    return [int(candidate[prev_idx]), int(candidate[next_idx])]
+    next_idx = x_idx + 1 if x_idx < len(tour) - 1 else 0
+    return [int(tour[prev_idx]), int(tour[next_idx])]
 
 
 def recombine_PMX(parent1: list[int], parent2: list[int]) -> list[list[int]]:
-    """Use two parent candidates to produce two offspring using partially mapped crossover."""
+    """Use two parent tours to produce two offspring tours using partially mapped crossover."""
     first_pos = rd.randrange(0, len(parent1) - 1)
     second_pos = rd.randrange(first_pos, len(parent1))
     offspring = []
@@ -385,7 +384,7 @@ def recombine_PMX(parent1: list[int], parent2: list[int]) -> list[list[int]]:
 
 
 def recombine_order_crossover(parent1: list[int], parent2: list[int]) -> list[list[int]]:
-    """Use two parent candidates to produce two offspring using order crossover."""
+    """Use two parent tours to produce two offspring tours using order crossover."""
     first_pos = rd.randrange(0, len(parent1) - 1)
     second_pos = rd.randrange(first_pos, len(parent1))
     offspring = []
@@ -404,8 +403,10 @@ def recombine_order_crossover(parent1: list[int], parent2: list[int]) -> list[li
     return offspring
 
 
+# TODO Maybe some kind of inversion technique which tries to "fix" the worst edge?
+#      e.g. Find the worst edge (x,y), and then try to insert y in every other position.
 def local_search(candidate: Candidate, distance_matrix: NDArray[float]) -> None:
-    """Perform a local search on candidate.
+    """Perform a local search on a candidate.
     It gets updated in-place if a better fitness was found.
     """
     best_fit = candidate.fitness
@@ -441,16 +442,17 @@ def init_heuristic(size: int, distance_matrix: NDArray[float],
     """Initializes the population with a heuristic."""
     population = []
     for i in range(size):
-        candidate = heuristic_solution(distance_matrix, fast, greedy)
-        population.append(Candidate(candidate))
+        candidate = Candidate(heuristic_solution(distance_matrix, fast, greedy))
+        candidate.recalculate_fitness(distance_matrix)
+        population.append(candidate)
     return population
 
 
-def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greedy: float = 0.5) -> list[int]:
+def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greediness: float = 0.5) -> list[int]:
     """Uses a greedy heuristic to find a solution.
-    If fast is True, then it returns the first found solution using a random starting position.
-    If fast is False, then it tries all starting positions and returns the best found solution.
-    greedy is a value between 0 and 1 which indicates the probability of taking the greedy next
+    If fast is True, then only one random starting position is tried; otherwise all starting positions
+    in a random permutation are tried.
+    greediness is a value between 0 and 1 which indicates the probability of taking the greedy next
     step instead of a random next step. In the case of a random step, it is still guaranteed that
     the total fitness is not infinite.
     """
@@ -462,12 +464,12 @@ def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greed
     sys.setrecursionlimit(10 * len(distance_matrix))
 
     choices = list(range(len(distance_matrix)))
-    rd.shuffle(choices)
+    rd.shuffle(choices)  # Important: start with a random permutation.
     results = []
     for start in choices:
         starting_choices = copy.deepcopy(choices)
         starting_choices.remove(start)
-        result = heuristic_recursive(starting_choices, [start], distance_matrix, greedy)
+        result = heuristic_recursive(starting_choices, [start], distance_matrix, greediness)
         if result is not False:
             results.append(result)
             if fast:
@@ -481,7 +483,7 @@ def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greed
 
 def heuristic_recursive(choices: list[int], current_result: list[int],
                         distance_matrix: NDArray[float],
-                        greedy: float = 0.5) -> list[int] | bool:
+                        greediness: float = 0.5) -> list[int] | bool:
     """Recursive function used in heuristic_solution."""
     if len(choices) == 0:
         if distance_matrix[current_result[-1]][current_result[0]] == math.inf:
@@ -490,9 +492,11 @@ def heuristic_recursive(choices: list[int], current_result: list[int],
         # All edges are valid, so the answer has been found.
         return current_result
 
-    if rd.random() < greedy:
+    if rd.random() < greediness:
+        # This choice is greedy, so sort the given choices in increasing greediness.
         choices.sort(key=lambda x: distance_matrix[current_result[-1]][x])
     else:
+        # This choice is not greedy, so randomize the choices.
         rd.shuffle(choices)
 
     for choice in choices:
@@ -502,7 +506,7 @@ def heuristic_recursive(choices: list[int], current_result: list[int],
         new_choices = copy.deepcopy(choices)
         new_choices.remove(choice)
         current_result.append(choice)
-        answer = heuristic_recursive(new_choices, current_result, distance_matrix, greedy)
+        answer = heuristic_recursive(new_choices, current_result, distance_matrix, greediness)
         if answer is not False:
             # An answer was found, so propagate it back up.
             return answer
@@ -513,7 +517,8 @@ def heuristic_recursive(choices: list[int], current_result: list[int],
 
 
 def select_k_tournament(population: list[Candidate], k: int, nr_times: int = 1) -> list[Candidate]:
-    """Performs a k-tournament on the population. Returns the best candidate among k random samples."""
+    """Performs nr_times k-tournaments on the population. Returns the best candidate among k random samples."""
+    assert k <= len(population), f'Cannot perform a k-tournament with k = {k} on a population of size {len(population)}'
     selected = []
     for _ in range(nr_times):
         tournament = rd.sample(population, k)
@@ -525,9 +530,9 @@ def elim_lambda_plus_mu(population: list[Candidate],
                         offspring: list[Candidate]) -> list[Candidate]:
     """Performs (lambda+mu)-elimination. Returns the new population."""
     lamda = len(population)
-    population.extend(offspring)
-    Candidate.sort(population)
-    return population[:lamda]
+    both = population + offspring
+    Candidate.sort(both)
+    return both[:lamda]
 
 
 def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
@@ -535,28 +540,31 @@ def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
                                         alpha: float = 1.0,
                                         sigma: float = 5.0) -> list[Candidate]:
     """Performs (lambda+mu)-elimination with fitness sharing for diversity promotion.
-    The sign(f(x)) is always 1 for the Traveling Salesman Problem.
+    The sign(f(x)) is always 1 for the Traveling Salesman Problem,
+    so the implementation does not explicitly calculate this.
     This implementation has been optimized to update incrementally.
     The fitness values of candidates are only changed temporarily.
     """
     lamda = len(population)
-    population.extend(offspring)
-    Candidate.sort(population)
-    for x in population:
+    old_population = population + offspring
+    Candidate.sort(old_population)
+    # We must remember the original fitness.
+    for x in old_population:
         x.original_fitness = x.fitness
     new_population = []
     while len(new_population) != lamda:
-        choice = population.pop(0)
+        choice = old_population.pop(0)
         neighbors = []
-        for neighbor in choice.sigma_neighborhood(population, sigma):
+        for neighbor in choice.sigma_neighborhood(old_population, sigma):
             if neighbor.fitness != math.inf:
                 penalty_term = math.pow((1 - (choice.distance(neighbor) / sigma)), alpha)
                 neighbor.fitness += neighbor.original_fitness * penalty_term
             neighbors.append(neighbor)
-            population.remove(neighbor)  # Temporarily remove this neighbor from the population.
-        # Now insert the neighbors back into the population to maintain its sortedness.
+            # Temporarily remove this neighbor from the population because otherwise it is no longer sorted.
+            old_population.remove(neighbor)
+        # Now insert the removed neighbors back into the population while maintaining its sortedness.
         for neighbor in neighbors:
-            population = insert_sorted(population, neighbor)
+            old_population = insert_sorted(old_population, neighbor, key=lambda y: y.fitness)
         new_population.append(choice)
     # We can restore the fitness here.
     for x in new_population:
@@ -564,21 +572,23 @@ def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
     return new_population
 
 
-def insert_sorted(population: list[Candidate], candidate: Candidate) -> list[Candidate]:
-    """Insert candidate into a sorted population such that the new population is still sorted.
-    Returns the new population.
+def insert_sorted(lst: list[Candidate], x: Candidate, key) -> list[Candidate]:
+    """Insert an element into a sorted list such that the new list is still sorted. Returns the new list.
+    key is a function applied on an element to determine its relative order.
+    lst must be sorted in increasing order.
     """
-    if len(population) == 0:
-        return [candidate]
+    if len(lst) == 0:
+        return [x]
     inserted = False
-    for i, x in enumerate(population):
-        if candidate.fitness <= x.fitness:
-            population.insert(i, candidate)
+    key_x = key(x)
+    for i, y in enumerate(lst):
+        if key_x <= key(y):
+            lst.insert(i, x)
             inserted = True
             break
     if not inserted:
-        population.append(candidate)
-    return population
+        lst.append(x)
+    return lst
 
 
 def elim_lambda_comma_mu(population: list[Candidate],
@@ -592,28 +602,9 @@ def elim_lambda_comma_mu(population: list[Candidate],
     return offspring[:lamda]
 
 
-def elim_age_based(population: list[Candidate],
-                   offspring: list[Candidate]) -> list[Candidate]:
-    """Performs age-based elimination. Returns the new population.
-    This is really just a specific case of (lamda,mu)-elimination.
-    """
-    assert len(population) == len(offspring), \
-        f'Age based elimination requires lambda == mu, got: {len(population)} != {len(offspring)}'
-    return elim_lambda_comma_mu(population, offspring)
-
-
-def elim_k_tournament(population: list[Candidate],
-                      offspring: list[Candidate],
-                      k: int) -> list[Candidate]:
-    """Performs k-tournament elimination. Returns the new population."""
-    lamda = len(population)
-    population.extend(offspring)
-    return select_k_tournament(population, k, lamda)
-
-
 def is_valid_tour(tour: list[int]) -> bool:
-    """Returns True if the candidate represents a valid tour, False otherwise.
-    A tour is valid if every city appears in it exactly once. Note that it does
+    """Returns True if the tour represents a valid tour, False otherwise.
+    A tour is valid iff every city appears in it exactly once. Note that it does
     not matter whether the length of the tour is infinite in this test.
     """
     present = np.zeros(len(tour), dtype=bool)
@@ -636,50 +627,37 @@ class r0758170:
     def __init__(self):
         self.reporter = Reporter.Reporter(self.__class__.__name__)
 
-    # The evolutionary algorithm's main loop
     def optimize(self, filename):
         # Read distance matrix from file.
         file = open(filename)
         distance_matrix = np.loadtxt(file, delimiter=",")
         file.close()
 
-        # seed = 3
-        # rd.seed(seed)
-        # np.random.seed(seed)
-
         # Parameters
-        # TODO These should eventually be moved into the Candidate class,
-        #      so they can be used for self-adaptivity.
-        k = 5
-        mutation_prob = 0.10
-        lamda = 70
-        mu = int(1.0 * lamda)
-        greedy = 0.65  # TODO Let greediness go up like 0 0.2 0.4 0.6 0.8 1.0 ?
-        alpha = 1.0  # TODO Play with alpha! Apparently it's more important than sigma...
-        sigma = math.ceil(len(distance_matrix) * 0.25)
+        k = 3
+        mutation_prob = 0.05
+        lamda = 100
+        mu = int(0.5 * lamda)
+        greedy = 0.50
+        alpha = 0.5
+        sigma = math.ceil(len(distance_matrix) / 2)
 
         assert mu % 2 == 0, f'Mu must be even, got: {mu}'
 
         # Initialization
+        population = init_heuristic(lamda, distance_matrix, fast=True, greedy=greedy)
 
-        # Seeding:
-        population = []
-        population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greedy=greedy))
-        # population.extend(init_monte_carlo(lamda - len(population), distance_matrix))
-
-        for x in population:
-            x.recalculate_fitness(distance_matrix)
+        assert len(population) == lamda, f'expected pop size == lamda, got: {len(population)} != {lamda}'
 
         assert_valid_tours(population)
 
         current_it = 1
-        max_it = 300  # Set to 0 for no limit
+        max_it = 300  # Set to -1 for no limit.
         while current_it != max_it + 1:
             offspring = []
 
             # Selection
             selected = select_k_tournament(population, k, mu)
-            # selected = select_k_tournament_fitness_sharing(population, k, mu)
 
             # Recombination
             it = iter(selected)
@@ -690,18 +668,18 @@ class r0758170:
                     x.recalculate_fitness(distance_matrix)
                 offspring.extend(new_offspring)
 
-            assert len(offspring) == mu, f'Nr. offspring ({len(offspring)}) does not match mu ({mu})'
+            assert len(offspring) == mu, f'Number of offspring ({len(offspring)}) does not match mu ({mu})'
 
-            assert_valid_tours(population)
             assert_valid_tours(offspring)
+
+            # TODO Maybe add local search back in, only on offspring?
+            #      Mutation can still be on both.
 
             # Mutation & Local search
             for x in itertools.chain(population, offspring):
                 if rd.random() < mutation_prob:
                     x.mutate()
                     x.recalculate_fitness(distance_matrix)
-                # if rd.random() < x.local_search_prob:
-                #     x.local_search(distance_matrix)
 
             assert_valid_tours(population)
             assert_valid_tours(offspring)
@@ -710,7 +688,6 @@ class r0758170:
             # population = elim_lambda_plus_mu(population, offspring)
             population = elim_lambda_plus_mu_fitness_sharing(population, offspring, alpha, sigma)
             # population = elim_lambda_comma_mu(population, offspring)
-            # population = elim_k_tournament(population, offspring, k)
 
             assert_valid_tours(population)
 
