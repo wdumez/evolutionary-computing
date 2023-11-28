@@ -68,12 +68,12 @@ class Candidate:
         self.fitness = 0.0
         self.original_fitness = self.fitness
         self.nr_mutations = 1
-        self.nr_local_search = 1
+        self.nr_local_search = 10
         self.mutate_func = mutate_swap
         self.recombine_func = recombine_edge_crossover
         self.local_search_func = local_search
         self.fitness_func = path_length
-        self.distance_func = distance_edges_cached
+        self.distance_func = distance_edges
 
     def __repr__(self) -> str:
         return str(self.tour)
@@ -286,7 +286,7 @@ def recombine_edge_crossover(parent1: list[int], parent2: list[int]) -> list[lis
                 offspring.append(current_element)
                 remaining.remove(current_element)
                 remove_references(edge_table, current_element)
-    assert_valid_tour(offspring)
+    assert_complete_tour(offspring)
     return [offspring, copy.deepcopy(offspring)]
 
 
@@ -398,7 +398,7 @@ def recombine_order_crossover(parent1: list[int], parent2: list[int]) -> list[li
     return offspring
 
 
-def local_search(candidate: Candidate, distance_matrix: NDArray[float], nr_times: int = 2) -> None:
+def local_search(candidate: Candidate, distance_matrix: NDArray[float], nr_times: int) -> None:
     """Perform a local search on a candidate. It gets updated in-place if a better fitness was found.
     The worst edge (x,y) is replaced by another edge(z,y),
     found by trying to insert y in each other position.
@@ -561,8 +561,7 @@ def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
     so the implementation does not explicitly calculate this.
     This implementation has been optimized to update incrementally.
     The fitness values of candidates are only changed temporarily.
-    The elitism parameter signifies how many of the best solutions are kept
-    without
+    The elitism best candidates do not get penalized.
     """
     lamda = len(population)
     old_population = population + offspring
@@ -572,14 +571,15 @@ def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
         x.original_fitness = x.fitness
     new_population = []
 
-    elites = [old_population[i] for i in range(elitism)]
+    elites = old_population[:elitism]
 
     while len(new_population) != lamda:
         choice = old_population.pop(0)
         neighbors = []
         for neighbor in choice.sigma_neighborhood(old_population, sigma):
             if neighbor not in elites and neighbor.fitness != math.inf:
-                # Only apply a penalty if this neighbor is not an elite.
+                # Only apply a penalty if this neighbor is not an elite
+                # and if its fitness isn't already infinite.
                 penalty_term = math.pow((1 - (choice.distance(neighbor) / sigma)), alpha)
                 neighbor.fitness += neighbor.original_fitness * penalty_term
             neighbors.append(neighbor)
@@ -589,7 +589,7 @@ def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
         for neighbor in neighbors:
             old_population = insert_sorted(old_population, neighbor, key=lambda y: y.fitness)
         new_population.append(choice)
-    # We can restore the fitness here.
+    # Now restore the original fitness.
     for x in new_population:
         x.fitness = x.original_fitness
     return new_population
@@ -625,9 +625,9 @@ def elim_lambda_comma_mu(population: list[Candidate],
     return offspring[:lamda]
 
 
-def is_valid_tour(tour: list[int]) -> bool:
-    """Returns True if the tour represents a valid tour, False otherwise.
-    A tour is valid iff every city appears in it exactly once. Note that it does
+def is_complete_tour(tour: list[int]) -> bool:
+    """Returns True if the tour represents a complete tour, False otherwise.
+    A tour is complete iff every city appears in it exactly once. Note that it does
     not matter whether the length of the tour is infinite in this test.
     """
     present = np.zeros(len(tour), dtype=bool)
@@ -636,13 +636,13 @@ def is_valid_tour(tour: list[int]) -> bool:
     return np.all(present)
 
 
-def assert_valid_tour(tour: list[int]):
-    assert is_valid_tour(tour), f'Got invalid tour: {tour}'
+def assert_complete_tour(tour: list[int]):
+    assert is_complete_tour(tour), f'Got incomplete tour: {tour}'
 
 
-def assert_valid_tours(candidates: list[Candidate]):
+def assert_complete_tours(candidates: list[Candidate]):
     for x in candidates:
-        assert_valid_tour(x.tour)
+        assert_complete_tour(x.tour)
 
 
 class r0758170:
@@ -658,10 +658,10 @@ class r0758170:
 
         # Parameters
         k = 5
-        mutation_prob = 0.10
+        mutation_prob = 0.05
         lso_prob = 0.05
-        lamda = 50
-        mu = math.ceil(1.0 * lamda)
+        lamda = 40
+        mu = math.ceil(1.5 * lamda)
         elitism = 1
         greedy = 0.65
         alpha = 0.75
@@ -671,13 +671,13 @@ class r0758170:
 
         # Initialization
         population = []
-        population.extend(init_heuristic(0, distance_matrix, fast=True, greedy=1.0))
+        population.extend(init_heuristic(1, distance_matrix, fast=True, greedy=0.95))
         population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greedy=greedy))
         Candidate.sort(population)
 
         assert len(population) == lamda, f'Expected pop size == lamda, got: {len(population)} != {lamda}'
 
-        assert_valid_tours(population)
+        assert_complete_tours(population)
 
         current_it = 1
         max_it = -1  # Set to -1 for no limit.
@@ -698,30 +698,34 @@ class r0758170:
 
             assert len(offspring) == mu, f'Number of offspring ({len(offspring)}) does not match mu ({mu})'
 
-            assert_valid_tours(offspring)
+            assert_complete_tours(offspring)
 
             # Mutation & Local search
             for x in itertools.chain(population[elitism:], offspring):
                 if rd.random() < mutation_prob:
                     x.mutate()
                     x.recalculate_fitness(distance_matrix)
-                if rd.random() < lso_prob:
                     x.local_search(distance_matrix)
 
-            assert_valid_tours(population)
-            assert_valid_tours(offspring)
+            assert_complete_tours(population)
+            assert_complete_tours(offspring)
 
             # Elimination
+            # population = elim_lambda_plus_mu(population, offspring)
             population = elim_lambda_plus_mu_fitness_sharing(population, offspring, alpha, sigma, elitism)
-            # population = elim_lambda_comma_mu(population, offspring)
 
             assert len(population) == lamda, f'Expected pop size == lamda, got: {len(population)} != {lamda}'
 
-            assert_valid_tours(population)
+            assert_complete_tours(population)
 
             # Recalculate mean and best
-            mean_objective, best_solution = Candidate.stats(population, include_inf=False)
+            mean_objective, best_solution = Candidate.stats(population, include_inf=True)
             min_dist, avg_dist, max_dist = Candidate.distance_stats(population)
+
+            inf_count = 0
+            for x in population:
+                if x.fitness == math.inf:
+                    inf_count += 1
 
             # Call the reporter with:
             #  - the mean objective function value of the population
@@ -737,8 +741,7 @@ class r0758170:
                   f'min dist: {min_dist:8.2f} | '
                   f'avg dist: {avg_dist:8.2f} | '
                   f'max dist: {max_dist:8.2f} | '
-                  f'mutation prob: {mutation_prob:4.2f} | '
-                  f'lso prob: {lso_prob:4.2f}'
+                  f'inf count: {inf_count}'
                   )
 
             current_it += 1
