@@ -67,3 +67,26 @@
 - Now, PMX no longer seems as good as edge crossover...
 - Cycle is terrible.
 - Edge crossover is far better than the others it seems...
+- ! Edge crossover seems to do _nothing_ on tour500 and upwards; switching to order crossover and now it does!
+- I feel like sigma creates this kind of inflection point where the mean stagnates; ideally you want sigma to be almost
+  0 because then the inflection point is infinitely low, but then you will end up with catastrophic convergence before
+  ever reaching it. So I feel like the best thing to do is to have sigma lower over time; e.g. start out at |tour| and
+  then lower over time to eventually 1 or some min value.
+- So the lectures stated that alpha was more important than sigma, but what I am observing is the opposite.
+- I tried letting sigma evolve over time, but this gave the same or worse results than just picking a constant low
+  value.
+- I tried setting sigma relative to the problem size, but found that a good value of sigma does not seem to scale
+  linearly with the problem size. E.g. sigma = 10% of tour50 is not equally as good as 10% of tour500. So I am currently
+  just sticking to a constant low value of 5 over all problem sizes and it is working OK.
+- Goal: as **exploitative** as possible, while still avoiding catastrophic convergence as much as possible (except for
+  tour50 because it is just too easy compared to the higher tours).
+- Most important parts of my algorithm: very greedy initialization; diversity promotion (fitness sharing) to avoid cat.
+  conv.; elitism to never lose the best solution.
+- I tried messing with the greediness, but in the end being greedy all the time gave the best results.
+- The greedy initialization depends on the starting city, and it is chosen at random for every member in the population.
+  So even if you set the greediness to 1.0, you will still end up with many different solutions. This diversity even
+  increases with larger problem sizes, because there are more possible starting cities to choose from (e.g. 50 VS 1000).
+- I turned off local search and found that I can do about 2x more iterations in 5 minutes (tour750), yet the rate of
+  convergence is virtually identical. So I can get better results this way. This makes sense because local search is
+  only really necessary to make your algorithm _more_ exploitative, but I don't need that since my initialization is
+  already very exploitative.

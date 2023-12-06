@@ -68,12 +68,12 @@ class Candidate:
         self.fitness = 0.0
         self.original_fitness = self.fitness
         self.nr_mutations = 1
-        self.nr_local_search = 10
+        self.nr_local_search = 1
         self.mutate_func = mutate_swap
-        self.recombine_func = recombine_edge_crossover
+        self.recombine_func = recombine_order_crossover
         self.local_search_func = local_search
         self.fitness_func = path_length
-        self.distance_func = distance_edges
+        self.distance_func = distance_edges_cached
 
     def __repr__(self) -> str:
         return str(self.tour)
@@ -92,7 +92,8 @@ class Candidate:
 
     def mutate(self) -> None:
         """Mutate self in-place."""
-        self.tour = self.mutate_func(self.tour, self.nr_mutations)
+        for _ in range(self.nr_mutations):
+            self.tour = self.mutate_func(self.tour)
 
     def recombine(self, other: Candidate) -> list[Candidate]:
         """Recombine with another parent to produce offspring."""
@@ -121,49 +122,45 @@ class Candidate:
     def sigma_neighborhood(self, others: list[Candidate], sigma: float) -> list[Candidate]:
         """Returns all candidates from others that are within sigma-distance from self."""
         # Important: by demanding that "x is not self", we still count
-        # other candidates which have the same tour as self.
+        # other candidates which have the same tour as self (but are different objects).
         return [x for x in others if self.distance(x) <= sigma and x is not self]
 
 
-def mutate_inversion(tour: list[int], nr_times: int = 1) -> list[int]:
+def mutate_inversion(tour: list[int]) -> list[int]:
     """Mutate a tour using inversion mutation."""
-    for _ in range(nr_times):
-        first_pos = rd.randrange(0, len(tour) - 1)
-        second_pos = rd.randrange(first_pos + 1, len(tour))
-        tour[first_pos:second_pos + 1] = np.flip(tour[first_pos:second_pos + 1])
+    first_pos = rd.randrange(0, len(tour) - 1)
+    second_pos = rd.randrange(first_pos + 1, len(tour))
+    tour[first_pos:second_pos + 1] = np.flip(tour[first_pos:second_pos + 1])
     return tour
 
 
-def mutate_swap(tour: list[int], nr_times: int = 1) -> list[int]:
+def mutate_swap(tour: list[int]) -> list[int]:
     """Mutate a tour using swap mutation."""
-    for _ in range(nr_times):
-        first_pos = rd.randrange(0, len(tour))
-        second_pos = first_pos
-        while second_pos == first_pos:
-            second_pos = rd.randrange(0, len(tour))
-        tmp = tour[first_pos]
-        tour[first_pos] = tour[second_pos]
-        tour[second_pos] = tmp
+    first_pos = rd.randrange(0, len(tour))
+    second_pos = first_pos
+    while second_pos == first_pos:
+        second_pos = rd.randrange(0, len(tour))
+    tmp = tour[first_pos]
+    tour[first_pos] = tour[second_pos]
+    tour[second_pos] = tmp
     return tour
 
 
-def mutate_scramble(tour: list[int], nr_times: int = 1) -> list[int]:
+def mutate_scramble(tour: list[int]) -> list[int]:
     """Mutate a tour using scramble mutation."""
-    for i in range(nr_times):
-        first_pos = rd.randrange(0, len(tour) - 1)
-        second_pos = rd.randrange(first_pos + 1, len(tour))
-        rd.shuffle(tour[first_pos:second_pos + 1])
+    first_pos = rd.randrange(0, len(tour) - 1)
+    second_pos = rd.randrange(first_pos + 1, len(tour))
+    rd.shuffle(tour[first_pos:second_pos + 1])
     return tour
 
 
-def mutate_insert(tour: list[int], nr_times: int = 1) -> list[int]:
+def mutate_insert(tour: list[int]) -> list[int]:
     """Mutate a tour using insert mutation."""
-    for i in range(nr_times):
-        first_pos = rd.randrange(0, len(tour) - 1)
-        second_pos = rd.randrange(first_pos + 1, len(tour))
-        tmp = tour[second_pos]
-        tour[first_pos + 2:second_pos + 1] = tour[first_pos + 1:second_pos]
-        tour[first_pos + 1] = tmp
+    first_pos = rd.randrange(0, len(tour) - 1)
+    second_pos = rd.randrange(first_pos + 1, len(tour))
+    tmp = tour[second_pos]
+    tour[first_pos + 2:second_pos + 1] = tour[first_pos + 1:second_pos]
+    tour[first_pos + 1] = tmp
     return tour
 
 
@@ -454,11 +451,11 @@ def init_monte_carlo(size: int, distance_matrix: NDArray[float]) -> list[Candida
 
 
 def init_heuristic(size: int, distance_matrix: NDArray[float],
-                   fast: bool = True, greedy: float = 0.5) -> list[Candidate]:
+                   fast: bool = True, greediness: float = 0.5) -> list[Candidate]:
     """Initializes the population with a heuristic."""
     population = []
     for i in range(size):
-        candidate = Candidate(heuristic_solution(distance_matrix, fast, greedy))
+        candidate = Candidate(heuristic_solution(distance_matrix, fast, greediness))
         candidate.recalculate_fitness(distance_matrix)
         population.append(candidate)
     return population
@@ -533,7 +530,9 @@ def heuristic_recursive(choices: list[int], current_result: list[int],
 
 
 def select_k_tournament(population: list[Candidate], k: int, nr_times: int = 1) -> list[Candidate]:
-    """Performs nr_times k-tournaments on the population. Returns the best candidate among k random samples."""
+    """Performs nr_times k-tournaments on the population.
+    Returns the best candidate among k random samples.
+    """
     assert k <= len(population), f'Cannot perform a k-tournament with k = {k} on a population of size {len(population)}'
     selected = []
     for _ in range(nr_times):
@@ -657,37 +656,38 @@ class r0758170:
         file.close()
 
         # Parameters
-        k = 5
+        k = 7
         mutation_prob = 0.05
         lso_prob = 0.05
         lamda = 40
         mu = math.ceil(1.5 * lamda)
         elitism = 1
-        greedy = 0.65
-        alpha = 0.75
-        sigma = math.ceil(len(distance_matrix) / 4)
+        greedy = 1.0
+        alpha = 0.25
+        # sigma = math.ceil(0.10 * len(distance_matrix))
+        sigma = 5
 
         assert mu % 2 == 0, f'Mu must be even, got: {mu}'
 
         # Initialization
         population = []
-        population.extend(init_heuristic(1, distance_matrix, fast=True, greedy=0.95))
-        population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greedy=greedy))
+        # population.extend(init_heuristic(1, distance_matrix, fast=True, greediness=0.95))
+        population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greediness=greedy))
         Candidate.sort(population)
 
-        assert len(population) == lamda, f'Expected pop size == lamda, got: {len(population)} != {lamda}'
+        assert len(population) == lamda, f'Expected pop size == lambda, got: {len(population)} != {lamda}'
 
         assert_complete_tours(population)
 
         current_it = 1
-        max_it = -1  # Set to -1 for no limit.
+        max_it = 1000  # Set to -1 for no limit.
         while current_it != max_it + 1:
-            offspring = []
 
             # Selection
             selected = select_k_tournament(population, k, mu)
 
             # Recombination
+            offspring = []
             it = iter(selected)
             for p1 in it:
                 p2 = next(it)
@@ -701,11 +701,12 @@ class r0758170:
             assert_complete_tours(offspring)
 
             # Mutation & Local search
-            for x in itertools.chain(population[elitism:], offspring):
+            # for x in itertools.chain(population[elitism:], offspring):
+            for x in offspring:
                 if rd.random() < mutation_prob:
                     x.mutate()
                     x.recalculate_fitness(distance_matrix)
-                    x.local_search(distance_matrix)
+                    # x.local_search(distance_matrix)
 
             assert_complete_tours(population)
             assert_complete_tours(offspring)
@@ -741,7 +742,8 @@ class r0758170:
                   f'min dist: {min_dist:8.2f} | '
                   f'avg dist: {avg_dist:8.2f} | '
                   f'max dist: {max_dist:8.2f} | '
-                  f'inf count: {inf_count}'
+                  f'inf count: {inf_count} | '
+                  f'sigma: {sigma}'
                   )
 
             current_it += 1
