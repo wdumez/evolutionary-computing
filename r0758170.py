@@ -68,7 +68,8 @@ class Candidate:
         self.fitness = 0.0
         self.original_fitness = self.fitness
         self.nr_mutations = 1
-        self.nr_local_search = 1
+        self.local_search_depth = 1
+        self.has_local_searched = False
         self.mutate_func = mutate_swap
         self.recombine_func = recombine_order_crossover
         self.local_search_func = local_search
@@ -94,6 +95,7 @@ class Candidate:
         """Mutate self in-place."""
         for _ in range(self.nr_mutations):
             self.tour = self.mutate_func(self.tour)
+        self.has_local_searched = False
 
     def recombine(self, other: Candidate) -> list[Candidate]:
         """Recombine with another parent to produce offspring."""
@@ -101,11 +103,14 @@ class Candidate:
         offspring = [copy.deepcopy(self), copy.deepcopy(other)]
         for x, tour in zip(offspring, offspring_tours):
             x.tour = tour
+            x.has_local_searched = False
         return offspring
 
     def local_search(self, distance_matrix: NDArray[float]) -> None:
         """Perform a local search."""
-        self.local_search_func(self, distance_matrix, self.nr_local_search)
+        if not self.has_local_searched:
+            self.local_search_func(self, distance_matrix, self.local_search_depth)
+        self.has_local_searched = False  # TODO set to False temporarily
 
     def recalculate_fitness(self, distance_matrix: NDArray[float]) -> None:
         """Recalculate the fitness."""
@@ -395,36 +400,41 @@ def recombine_order_crossover(parent1: list[int], parent2: list[int]) -> list[li
     return offspring
 
 
-def local_search(candidate: Candidate, distance_matrix: NDArray[float], nr_times: int) -> None:
+def local_search(candidate: Candidate, distance_matrix: NDArray[float], depth: int) -> None:
     """Perform a local search on a candidate. It gets updated in-place if a better fitness was found.
-    The worst edge (x,y) is replaced by another edge(z,y),
-    found by trying to insert y in each other position.
+    Every combination of two elements is swapped, for each level of the depth.
     """
-    changed = False
-    for i in range(nr_times):
-        if i > 0 and not changed:
-            break  # The first time could not improve, so repeating does nothing.
-        best_fit = candidate.fitness
-        tmp = copy.deepcopy(candidate)
-        changed = False
-        worst_idx = get_worst_element_idx(candidate.tour, distance_matrix)
-        worst_element = tmp.tour.pop(worst_idx)
+    best_candidate = copy.deepcopy(candidate)
+    current_candidate = copy.deepcopy(candidate)
+    local_search_recursive(best_candidate, current_candidate, distance_matrix, depth)
+    if best_candidate.fitness < candidate.fitness:
+        candidate.tour = copy.deepcopy(best_candidate.tour)
+        candidate.fitness = best_candidate.fitness
 
-        for new_idx in range(0, len(candidate)):
-            if new_idx == worst_idx:
+
+def local_search_recursive(best_candidate: Candidate,
+                           current_candidate: Candidate,
+                           distance_matrix: NDArray[float],
+                           depth: int):
+    """Recursive function used in local_search."""
+    if depth == 0:
+        return
+    for idx1 in rd.sample(range(len(current_candidate)), math.ceil(math.log(len(distance_matrix)))):
+        # for idx2 in range(len(current_candidate)):
+        for idx2 in rd.sample(range(len(current_candidate)), math.ceil(math.log(len(distance_matrix)))):
+            if idx1 == idx2:
                 continue
-            # Make change.
-            tmp.tour.insert(new_idx, worst_element)
-            # Test to see if it's better.
-            tmp.recalculate_fitness(distance_matrix)
-            if tmp.fitness < best_fit:
-                best_fit = tmp.fitness
-                candidate.tour = copy.deepcopy(tmp.tour)
-                changed = True
-            # Undo change.
-            tmp.tour.pop(new_idx)
-        if changed:
-            candidate.recalculate_fitness(distance_matrix)
+            x = current_candidate[idx1]
+            current_candidate[idx1] = current_candidate[idx2]
+            current_candidate[idx2] = x
+            current_candidate.recalculate_fitness(distance_matrix)
+            if current_candidate.fitness < best_candidate.fitness:
+                best_candidate.fitness = current_candidate.fitness
+                best_candidate.tour = copy.deepcopy(current_candidate.tour)
+            local_search_recursive(best_candidate, current_candidate, distance_matrix, depth - 1)
+            x = current_candidate[idx2]
+            current_candidate[idx2] = current_candidate[idx1]
+            current_candidate[idx1] = x
 
 
 def get_worst_element_idx(tour: list[int], distance_matrix: NDArray[float]) -> int:
@@ -656,31 +666,40 @@ class r0758170:
         file.close()
 
         # Parameters
-        k = 7
+        k = 5
         mutation_prob = 0.05
-        lso_prob = 0.05
+        lso_prob = 0.0
         lamda = 40
-        mu = math.ceil(1.5 * lamda)
+        mu = math.ceil(2.0 * lamda)
+        greedy_seed = math.ceil(0.10 * lamda)
+        greedy_seed = 0
         elitism = 1
-        greedy = 1.0
+        greediness = 0.75
         alpha = 0.25
-        # sigma = math.ceil(0.10 * len(distance_matrix))
-        sigma = 5
+        sigma = math.ceil(0.20 * len(distance_matrix))
+        sigma = 20
 
         assert mu % 2 == 0, f'Mu must be even, got: {mu}'
 
         # Initialization
+        print('Initializing, this may take a while...')
         population = []
-        # population.extend(init_heuristic(1, distance_matrix, fast=True, greediness=0.95))
-        population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greediness=greedy))
+        # population.extend(init_heuristic(greedy_seed, distance_matrix, fast=True, greediness=1.0))
+        population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greediness=greediness))
+        # population.extend(init_heuristic(5, distance_matrix, fast=True, greediness=0.95))
+        # population.extend(init_heuristic(5, distance_matrix, fast=True, greediness=0.75))
+        # population.extend(init_heuristic(5, distance_matrix, fast=True, greediness=0.50))
+        # population.extend(init_heuristic(5, distance_matrix, fast=True, greediness=0.25))
+        # population.extend(init_heuristic(lamda - len(population), distance_matrix, fast=True, greediness=0.0))
         Candidate.sort(population)
+        print('Finished initializing')
 
         assert len(population) == lamda, f'Expected pop size == lambda, got: {len(population)} != {lamda}'
 
         assert_complete_tours(population)
 
         current_it = 1
-        max_it = 1000  # Set to -1 for no limit.
+        max_it = 400  # Set to -1 for no limit.
         while current_it != max_it + 1:
 
             # Selection
@@ -700,16 +719,20 @@ class r0758170:
 
             assert_complete_tours(offspring)
 
-            # Mutation & Local search
-            # for x in itertools.chain(population[elitism:], offspring):
-            for x in offspring:
+            # Mutation
+            # for x in offspring:
+            for x in itertools.chain(population[elitism:], offspring):
                 if rd.random() < mutation_prob:
                     x.mutate()
                     x.recalculate_fitness(distance_matrix)
-                    # x.local_search(distance_matrix)
 
             assert_complete_tours(population)
             assert_complete_tours(offspring)
+
+            # Local search
+            for x in itertools.chain(population, offspring):
+                if rd.random() < lso_prob:
+                    x.local_search(distance_matrix)
 
             # Elimination
             # population = elim_lambda_plus_mu(population, offspring)
