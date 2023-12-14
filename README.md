@@ -90,3 +90,13 @@
   convergence is virtually identical. So I can get better results this way. This makes sense because local search is
   only really necessary to make your algorithm _more_ exploitative, but I don't need that since my initialization is
   already very exploitative.
+- I made local search a lot faster, and it seems to do okay now.
+- I sent an email about whether it is alright to do a pure greedy init. Response: it's fine to use a greedy heuristic,
+  but also initialize with some randomness. If you can't beat the heuristic, then "I know this feels bad but tough
+  luck". So yeah. Best to init. with a greedy seed to at least make it into 200%, then you get 0.8 anyway.
+- I think catastrophic convergence with greedy init can be avoided by **not** mutating the population. So right now I am
+  doing mutation and local search on the offspring only.
+- A good value for sigma_min is not constant in the problem size.
+- I need to maintain diversity in the initialization. So far, I assumed that doing a greedy init (1.0) for all
+  candidates, that this is not maintained. However, for tour1000 I am seeing that there are *no* duplicates! And the
+  avg. (~350) and max. (~550) dist. seems to also imply that it actually *is* kind of diverse...

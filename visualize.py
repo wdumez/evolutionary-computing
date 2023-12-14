@@ -5,10 +5,15 @@ import pandas as pd
 import seaborn as sns
 
 
-def preprocess(filename) -> tuple[pd.DataFrame, int]:
-    """Reads in the data with preprocessing applied."""
+def get_problem_size(filename) -> int:
+    """Get the problem size of a solution file."""
     df = pd.read_csv(filename, skiprows=2, header=0, skipinitialspace=True)
     problem_size = df.shape[1] - 5
+    return problem_size
+
+
+def preprocess(filename: str) -> pd.DataFrame:
+    """Reads in the data with preprocessing applied."""
     new_file = ''
     with open(filename, 'r') as file:
         for i, line in enumerate(file.readlines()):
@@ -19,11 +24,12 @@ def preprocess(filename) -> tuple[pd.DataFrame, int]:
             words = words[0:4]
             new_file += ','.join(words) + '\n'
     return pd.read_csv(StringIO(new_file),
-                       skiprows=1, header=0, skipinitialspace=True), problem_size
+                       skiprows=1, header=0, skipinitialspace=True)
 
 
 def plot(filename: str = './r0758170.csv'):
-    df, problem_size = preprocess(filename)
+    df = preprocess(filename)
+    problem_size = get_problem_size(filename)
     nr_iterations = len(df)
     final_best_fit = float(df['Best value'].iloc[-1])
     df = pd.melt(df, ['Elapsed time', '# Iteration'], var_name='Objective', value_name='Fitness')

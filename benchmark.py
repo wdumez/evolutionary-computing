@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 import visualize
 
 start_nr = 1
-nr_benchmarks = 5
+nr_benchmarks = 20
 
-for benchmark_nr in range(start_nr, start_nr + nr_benchmarks + 1):
+for benchmark_nr in range(start_nr, start_nr + nr_benchmarks):
     problem = 'tour50'
     filename = f'./{problem}.csv'
     benchmark_filename = f'benchmark_{problem}_{benchmark_nr:03}'
