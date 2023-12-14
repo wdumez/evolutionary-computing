@@ -1,7 +1,6 @@
 from __future__ import annotations
 import functools
 import copy
-import itertools
 import random as rd
 import sys
 import math
@@ -67,10 +66,10 @@ class Candidate:
         self.fitness = 0.0
         self.original_fitness = self.fitness
         self.nr_mutations = 1
+        self.mutate_options = [swap, insert, scramble, inversion]
+        self.recombine_options = [recombine_PMX, recombine_order_crossover]
+        self.lso_options = [swap, insert, inversion]
         self.local_search_depth = 1
-        self.mutate_func = mutate_swap
-        self.recombine_func = recombine_order_crossover
-        self.local_search_func = local_search
         self.fitness_func = path_length
         self.distance_func = distance_edges_cached
 
@@ -92,21 +91,24 @@ class Candidate:
     def mutate(self) -> None:
         """Mutate self in-place."""
         for _ in range(self.nr_mutations):
-            self.mutate_func = rd.choice([mutate_swap, mutate_insert, mutate_scramble, mutate_inversion])
-            self.tour = self.mutate_func(self.tour)
+            move_func = rd.choice(self.mutate_options)
+            self.tour = mutate(self.tour, move_func)
 
     def recombine(self, other: Candidate) -> list[Candidate]:
         """Recombine with another parent to produce offspring."""
-        self.recombine_func = rd.choice([recombine_PMX, recombine_order_crossover])
-        offspring_tours = [x for x in self.recombine_func(self.tour, other.tour)]
+        recombine_func = rd.choice(self.recombine_options)
+        offspring_tours = [x for x in recombine_func(self.tour, other.tour)]
         offspring = []
         for tour in offspring_tours:
             offspring.append(Candidate(tour))
         return offspring
 
-    def local_search(self, distance_matrix: NDArray[float]) -> None:
-        """Perform a local search."""
-        self.local_search_func(self, distance_matrix, self.local_search_depth)
+    def local_search(self, distance_matrix: NDArray[float], fast=True) -> None:
+        """Perform a local search.
+        If fast is True, then the search is not exhaustive for performance reasons.
+        """
+        move_func = rd.choice(self.lso_options)
+        local_search(self, distance_matrix, self.local_search_depth, move_func, fast)
 
     def recalculate_fitness(self, distance_matrix: NDArray[float]) -> None:
         """Recalculate the fitness."""
@@ -127,7 +129,7 @@ class Candidate:
         return [x for x in others if self.distance(x) <= sigma and x is not self]
 
 
-def align(tour, first_pos, second_pos) -> tuple[list[int], int]:
+def align(tour: list[int], first_pos: int, second_pos: int) -> tuple[list[int], int]:
     """Align a tour so that it starts with the index of first_pos,
     where [first_pos:second_pos) is a range of indices in tour.
     The new first_pos is 0, and so is not returned.
@@ -149,40 +151,45 @@ def align(tour, first_pos, second_pos) -> tuple[list[int], int]:
     return tour, second_pos
 
 
-def mutate_inversion(tour: list[int]) -> list[int]:
-    """Mutate a tour using inversion mutation."""
-    first_pos, second_pos = rd.sample(range(len(tour)), 2)
-    tour, second_pos = align(tour, first_pos, second_pos)
-    tour[:second_pos] = np.flip(tour[:second_pos])
+def swap(tour: list[int], a: int, b: int) -> list[int]:
+    """Swap the values of indices a and b in tour, and return the new tour."""
+    tmp = tour[a]
+    tour[a] = tour[b]
+    tour[b] = tmp
     return tour
 
 
-def mutate_swap(tour: list[int]) -> list[int]:
-    """Mutate a tour using swap mutation."""
-    first_pos, second_pos = rd.sample(range(len(tour)), 2)
-    tmp = tour[first_pos]
-    tour[first_pos] = tour[second_pos]
-    tour[second_pos] = tmp
+def insert(tour: list[int], a: int, b: int) -> list[int]:
+    """Insert the value of index (b-1) before the value of index a in tour, and return the new tour.
+    Example:
+        insert([0,1,2,3,4], 1, 4) returns [3,1,2,4,0]
+    """
+    tour, b = align(tour, a, b)
+    value_b = tour[b - 1]
+    tour = [value_b] + tour[:b - 1] + tour[b:]
     return tour
 
 
-def mutate_scramble(tour: list[int]) -> list[int]:
-    """Mutate a tour using scramble mutation."""
-    first_pos, second_pos = rd.sample(range(len(tour)), 2)
-    tour, second_pos = align(tour, first_pos, second_pos)
-    tmp = tour[:second_pos]
+def inversion(tour: list[int], a: int, b: int) -> list[int]:
+    """Invert the range [a:b) of tour, and return the new tour."""
+    tour, b = align(tour, a, b)
+    tour[:b] = np.flip(tour[:b])
+    return tour
+
+
+def scramble(tour: list[int], a: int, b: int) -> list[int]:
+    """Scramble the range [a:b) of tour, and return the new tour."""
+    tour, b = align(tour, a, b)
+    tmp = tour[:b]
     rd.shuffle(tmp)
-    tour[:second_pos] = tmp
+    tour[:b] = tmp
     return tour
 
 
-def mutate_insert(tour: list[int]) -> list[int]:
-    """Mutate a tour using insert mutation."""
-    first_pos, second_pos = rd.sample(range(len(tour)), 2)
-    tour, second_pos = align(tour, first_pos, second_pos)
-    to_insert = tour[second_pos - 1]
-    tour = [to_insert] + tour[:second_pos - 1] + tour[second_pos:]
-    return tour
+def mutate(tour: list[int], move_func) -> list[int]:
+    """Mutate a tour with a movement function (swap, inversion, insert or scramble)."""
+    a, b = rd.sample(range(len(tour)), 2)
+    return move_func(tour, a, b)
 
 
 def path_length(tour: list[int], distance_matrix: NDArray[float]) -> float:
@@ -206,9 +213,8 @@ def distance_edges(tour1: list[int], tour2: list[int]) -> float:
 def get_edges(tour: list[int]) -> set[tuple[int, int]]:
     """Return all edges of the tour in a set."""
     edges = []
-    for i in range(len(tour) - 1):
+    for i in range(-1, len(tour) - 1):
         edges.append((tour[i], tour[i + 1]))
-    edges.append((tour[-1], tour[0]))
     return set(edges)
 
 
@@ -234,7 +240,7 @@ def recombine_cycle_crossover(parent1: list[int], parent2: list[int]) -> list[li
     """Use two parent tours to produce two offspring tours using cycle crossover."""
     offspring1 = copy.deepcopy(parent1)
     offspring2 = copy.deepcopy(parent2)
-    cycles = find_cycles(parent1, parent2)
+    cycles = get_cycles(parent1, parent2)
     for i, cycle in enumerate(cycles):
         if i % 2 == 0:
             for idx in cycle:
@@ -247,7 +253,7 @@ def recombine_cycle_crossover(parent1: list[int], parent2: list[int]) -> list[li
     return [offspring1, offspring2]
 
 
-def find_cycles(tour1: list[int], tour2: list[int]) -> list[list[int]]:
+def get_cycles(tour1: list[int], tour2: list[int]) -> list[list[int]]:
     """Returns all cycles of the two tours using indices."""
     unused_idx = list(range(len(tour1)))
     cycles = []
@@ -363,8 +369,9 @@ def get_adj(x: int, tour: list[int]) -> list[int]:
 
 def recombine_PMX(parent1: list[int], parent2: list[int]) -> list[list[int]]:
     """Use two parent tours to produce two offspring tours using partially mapped crossover."""
-    first_pos = rd.randrange(0, len(parent1) - 1)
-    second_pos = rd.randrange(first_pos, len(parent1))
+    first_pos, second_pos = rd.sample(range(len(parent1)), 2)
+    parent1, _ = align(parent1, first_pos, second_pos)
+    parent2, second_pos = align(parent2, first_pos, second_pos)
     offspring = []
     for p1, p2 in [(parent1, parent2), (parent2, parent1)]:
         # We must initialize offspring with -1's, to identify whether a spot is not yet filled.
@@ -372,9 +379,9 @@ def recombine_PMX(parent1: list[int], parent2: list[int]) -> list[list[int]]:
         for i in range(len(off)):
             off[i] = -1
 
-        off[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
-        for elem in p2[first_pos:second_pos + 1]:
-            if elem in p1[first_pos:second_pos + 1]:
+        off[:second_pos] = p1[:second_pos]
+        for elem in p2[:second_pos]:
+            if elem in p1[:second_pos]:
                 continue  # elem already occurs in offspring.
             # elem is not yet in offspring, so find the index to place it.
             idx = 0
@@ -392,17 +399,18 @@ def recombine_PMX(parent1: list[int], parent2: list[int]) -> list[list[int]]:
 
 def recombine_order_crossover(parent1: list[int], parent2: list[int]) -> list[list[int]]:
     """Use two parent tours to produce two offspring tours using order crossover."""
-    first_pos = rd.randrange(0, len(parent1) - 1)
-    second_pos = rd.randrange(first_pos, len(parent1))
+    first_pos, second_pos = rd.sample(range(len(parent1)), 2)
+    parent1, _ = align(parent1, first_pos, second_pos)
+    parent2, second_pos = align(parent2, first_pos, second_pos)
     offspring = []
     for p1, p2 in [(parent1, parent2), (parent2, parent1)]:
         off = copy.deepcopy(parent1)
-        off[first_pos:second_pos + 1] = p1[first_pos:second_pos + 1]
+        off[:second_pos] = p1[:second_pos]
         # Now copy the remaining values of p2 into off, starting from second_pos.
-        idx_p2 = second_pos + 1 if second_pos < len(parent1) - 1 else 0
+        idx_p2 = second_pos
         idx_off = idx_p2
-        while idx_off != first_pos:
-            if p2[idx_p2] not in off[first_pos:second_pos + 1]:
+        while idx_off != 0:
+            if p2[idx_p2] not in off[:second_pos]:
                 off[idx_off] = p2[idx_p2]
                 idx_off = 0 if idx_off + 1 >= len(parent1) else idx_off + 1
             idx_p2 = 0 if idx_p2 + 1 >= len(parent1) else idx_p2 + 1
@@ -410,13 +418,18 @@ def recombine_order_crossover(parent1: list[int], parent2: list[int]) -> list[li
     return offspring
 
 
-def local_search(candidate: Candidate, distance_matrix: NDArray[float], depth: int) -> None:
+def local_search(candidate: Candidate,
+                 distance_matrix: NDArray[float],
+                 depth: int,
+                 move_func,
+                 fast=True) -> None:
     """Perform a local search on a candidate. It gets updated in-place if a better fitness was found.
-    Every combination of two elements is swapped, for each level of the depth.
+    The search is not exhaustive and only considers log candidates, for performance reasons.
+    Move_func determines the neighborhood structure.
     """
     best_candidate = copy.deepcopy(candidate)
     current_candidate = copy.deepcopy(candidate)
-    local_search_recursive(best_candidate, current_candidate, distance_matrix, depth)
+    local_search_recursive(best_candidate, current_candidate, distance_matrix, depth, move_func, fast)
     if best_candidate.fitness < candidate.fitness:
         candidate.tour = copy.deepcopy(best_candidate.tour)
         candidate.fitness = best_candidate.fitness
@@ -425,26 +438,43 @@ def local_search(candidate: Candidate, distance_matrix: NDArray[float], depth: i
 def local_search_recursive(best_candidate: Candidate,
                            current_candidate: Candidate,
                            distance_matrix: NDArray[float],
-                           depth: int):
+                           depth: int,
+                           move_func,
+                           fast):
     """Recursive function used in local_search."""
     if depth == 0:
         return
-    for idx1 in rd.sample(range(len(current_candidate)), math.ceil(math.log(len(distance_matrix)))):
-        # for idx2 in range(len(current_candidate)):
-        for idx2 in rd.sample(range(len(current_candidate)), math.ceil(math.log(len(distance_matrix)))):
-            if idx1 == idx2:
+    for neighbor in lso_neighborhood(current_candidate, move_func, fast):
+        neighbor.recalculate_fitness(distance_matrix)
+        if neighbor.fitness < best_candidate.fitness:
+            best_candidate.fitness = neighbor.fitness
+            best_candidate.tour = copy.deepcopy(neighbor.tour)
+        local_search_recursive(best_candidate, neighbor, distance_matrix, depth - 1, move_func, fast)
+
+
+def lso_neighborhood(candidate: Candidate, move_func, fast=True):
+    """Generator which generates all candidates within
+    1-distance of candidate in random order, according to a movement function.
+    The neighbor's fitness has not been calculated yet.
+    If fast is True, then only consider log(len(candidate) random neighbors.
+    """
+    neighbor = copy.deepcopy(candidate)
+    size = len(candidate)
+    options = list(range(size))
+    a_options = copy.deepcopy(options)
+    b_options = copy.deepcopy(options)
+    if fast:
+        rd.shuffle(a_options)
+        rd.shuffle(b_options)
+        nr = math.ceil(math.log(size))
+        a_options = a_options[:nr]
+        b_options = b_options[:nr]
+    for a in a_options:
+        for b in b_options:
+            if a == b:
                 continue
-            x = current_candidate[idx1]
-            current_candidate[idx1] = current_candidate[idx2]
-            current_candidate[idx2] = x
-            current_candidate.recalculate_fitness(distance_matrix)
-            if current_candidate.fitness < best_candidate.fitness:
-                best_candidate.fitness = current_candidate.fitness
-                best_candidate.tour = copy.deepcopy(current_candidate.tour)
-            local_search_recursive(best_candidate, current_candidate, distance_matrix, depth - 1)
-            x = current_candidate[idx2]
-            current_candidate[idx2] = current_candidate[idx1]
-            current_candidate[idx1] = x
+            neighbor.tour = move_func(candidate.tour, a, b)
+            yield copy.deepcopy(neighbor)
 
 
 def get_worst_element_idx(tour: list[int], distance_matrix: NDArray[float]) -> int:
@@ -713,19 +743,18 @@ class r0758170:
 
         # Parameters
         k = 7
-        mutation_prob = 0.05
-        lso_prob = 0.01
         lamda = 40
         mu = math.ceil(1.5 * lamda)
-        elitism = 0
         greedy_percentage = 0.10
         alpha_max = 3.0
         alpha_min = 0.5
         alpha = alpha_max
         sigma_max = math.ceil(0.30 * len(distance_matrix))
-        sigma_min = min(20, math.ceil(0.10 * len(distance_matrix)))
+        sigma_min = math.ceil(0.10 * len(distance_matrix))
         sigma = sigma_max
         power = 2.5
+        mutation_prob = 0.05
+        lso_prob = 0.05
 
         # Check that parameters are valid
         assert 0 < k <= lamda, f'k must be positive and leq to lambda, got: {k}'
@@ -733,7 +762,6 @@ class r0758170:
         assert 0.0 <= lso_prob <= 1.0, f'Lso_prob should be a probability, got: {lso_prob}'
         assert lamda > 0, f'Lambda must be positive, got: {lamda}'
         assert mu % 2 == 0, f'Mu must be even, got: {mu}'
-        assert elitism >= 0, f'Elitism must be non-negative, got: {elitism}'
         assert (alpha_max >= 0.0 and alpha_min >= 0.0 and alpha >= 0.0), \
             f'Alpha should be non-negative, got: {alpha}'
         assert (sigma_max > 0.0 and sigma_min > 0.0 and sigma > 0.0), \
@@ -741,12 +769,15 @@ class r0758170:
         assert power > 0.0, f'Power must be positive, got: {power}'
 
         # Initialization
-        print('Initializing, this may take a while...')
-        very_greedy = init_heuristic(math.ceil(greedy_percentage * lamda), distance_matrix, fast=True, greediness=1.0)
-        more_random = init_heuristic_span(lamda - len(very_greedy), distance_matrix, 0.0, 0.95)
+        nr_very_greedy = math.ceil(greedy_percentage * lamda)
+        nr_more_random = lamda - nr_very_greedy
+        print(f'Initializing with {nr_very_greedy} very greedy and {nr_more_random} more random.')
+        print('This may take a while...')
+        very_greedy = init_heuristic(nr_very_greedy, distance_matrix, fast=True, greediness=1.0)
+        more_random = init_heuristic_span(nr_more_random, distance_matrix, 0.10, 0.90)
         population = very_greedy + more_random
         Candidate.sort(population)
-        print('Finished initializing')
+        print('Finished initializing.')
 
         distances = open('distances.csv', 'w')
         distances.write('time,min,average,max\n')
@@ -776,12 +807,12 @@ class r0758170:
                     x.recalculate_fitness(distance_matrix)
 
             # Local search
-            for x in itertools.chain(offspring):
+            for x in offspring:
                 if rd.random() < lso_prob:
                     x.local_search(distance_matrix)
 
             # Elimination
-            population = elim_lambda_plus_mu_fitness_sharing(population, offspring, alpha, sigma, elitism)
+            population = elim_lambda_plus_mu_fitness_sharing(population, offspring, alpha, sigma)
 
             # Update alpha and sigma
             factor = (math.pow((time_left / 300.0), power))
@@ -801,6 +832,7 @@ class r0758170:
                                              np.array(best_solution.tour, dtype=int))
 
             distances.write(f'{300.0 - time_left},{min_dist},{avg_dist},{max_dist}\n')
+
             print(f'{time_left:5.1f} sec | '
                   f'{current_it:6} | '
                   f'mean: {mean_objective:10.2f} | '
@@ -815,6 +847,6 @@ class r0758170:
             current_it += 1
             if time_left < 0:
                 break
-        print('Done')
+        print('Done.')
         distances.close()
         return 0
