@@ -66,9 +66,9 @@ class Candidate:
         self.fitness = 0.0
         self.original_fitness = self.fitness
         self.nr_mutations = 1
-        self.mutate_options = [swap, insert, scramble, inversion]
+        self.mutate_options = [swap, insert, inversion, scramble]
         self.recombine_options = [recombine_PMX, recombine_order_crossover]
-        self.lso_options = [swap, insert, inversion]
+        self.lso_options = [swap]
         self.local_search_depth = 1
         self.fitness_func = path_length
         self.distance_func = distance_edges_cached
@@ -742,7 +742,7 @@ class r0758170:
         file.close()
 
         # Parameters
-        k = 7
+        k = 5
         lamda = 40
         mu = math.ceil(1.5 * lamda)
         greedy_percentage = 0.10
@@ -754,7 +754,7 @@ class r0758170:
         sigma = sigma_max
         power = 2.5
         mutation_prob = 0.05
-        lso_prob = 0.05
+        lso_prob = 0.01
 
         # Check that parameters are valid
         assert 0 < k <= lamda, f'k must be positive and leq to lambda, got: {k}'
@@ -774,7 +774,8 @@ class r0758170:
         print(f'Initializing with {nr_very_greedy} very greedy and {nr_more_random} more random.')
         print('This may take a while...')
         very_greedy = init_heuristic(nr_very_greedy, distance_matrix, fast=True, greediness=1.0)
-        more_random = init_heuristic_span(nr_more_random, distance_matrix, 0.10, 0.90)
+        more_random = init_heuristic_span(nr_more_random, distance_matrix, 0.0, 0.95)
+        # more_random = init_heuristic(nr_more_random, distance_matrix, fast=True, greediness=0.0)
         population = very_greedy + more_random
         Candidate.sort(population)
         print('Finished initializing.')
