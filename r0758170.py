@@ -65,11 +65,9 @@ class Candidate:
         self.tour = tour
         self.fitness = 0.0
         self.original_fitness = self.fitness
-        self.nr_mutations = 1
         self.mutate_options = [swap, insert, inversion, scramble]
-        self.recombine_options = [recombine_PMX, recombine_order_crossover]
-        self.lso_options = [swap]
-        self.local_search_depth = 1
+        self.recombine_func = recombine_order_crossover
+        self.lso_options = [swap, insert]
         self.fitness_func = path_length
         self.distance_func = distance_edges_cached
 
@@ -90,25 +88,23 @@ class Candidate:
 
     def mutate(self) -> None:
         """Mutate self in-place."""
-        for _ in range(self.nr_mutations):
-            move_func = rd.choice(self.mutate_options)
-            self.tour = mutate(self.tour, move_func)
+        move_func = rd.choice(self.mutate_options)
+        self.tour = mutate(self.tour, move_func)
 
     def recombine(self, other: Candidate) -> list[Candidate]:
         """Recombine with another parent to produce offspring."""
-        recombine_func = rd.choice(self.recombine_options)
-        offspring_tours = [x for x in recombine_func(self.tour, other.tour)]
+        offspring_tours = [x for x in self.recombine_func(self.tour, other.tour)]
         offspring = []
         for tour in offspring_tours:
             offspring.append(Candidate(tour))
         return offspring
 
     def local_search(self, distance_matrix: NDArray[float], fast=True) -> None:
-        """Perform a local search.
+        """Perform a local search and update the candidate in-place.
         If fast is True, then the search is not exhaustive for performance reasons.
         """
         move_func = rd.choice(self.lso_options)
-        local_search(self, distance_matrix, self.local_search_depth, move_func, fast)
+        local_search(self, distance_matrix, 1, move_func, fast)
 
     def recalculate_fitness(self, distance_matrix: NDArray[float]) -> None:
         """Recalculate the fitness."""
@@ -132,6 +128,7 @@ class Candidate:
 def align(tour: list[int], first_pos: int, second_pos: int) -> tuple[list[int], int]:
     """Align a tour so that it starts with the index of first_pos,
     where [first_pos:second_pos) is a range of indices in tour.
+    Also returns the new second_pos.
     The new first_pos is 0, and so is not returned.
     Examples:
         input: tour = [0,1,2,3,4,5,6,7,8,9], first_pos = 3, second_pos = 8
@@ -424,8 +421,8 @@ def local_search(candidate: Candidate,
                  move_func,
                  fast=True) -> None:
     """Perform a local search on a candidate. It gets updated in-place if a better fitness was found.
-    The search is not exhaustive and only considers log candidates, for performance reasons.
-    Move_func determines the neighborhood structure.
+    The search is not exhaustive and only considers log(len(distance_matrix)) candidates, for performance reasons.
+    Move_func determines the neighborhood structure (accepts: swap, insert, scramble, inversion).
     """
     best_candidate = copy.deepcopy(candidate)
     current_candidate = copy.deepcopy(candidate)
@@ -454,7 +451,7 @@ def local_search_recursive(best_candidate: Candidate,
 
 def lso_neighborhood(candidate: Candidate, move_func, fast=True):
     """Generator which generates all candidates within
-    1-distance of candidate in random order, according to a movement function.
+    1-distance of candidate, according to a movement function.
     The neighbor's fitness has not been calculated yet.
     If fast is True, then only consider log(len(candidate) random neighbors.
     """
@@ -477,63 +474,33 @@ def lso_neighborhood(candidate: Candidate, move_func, fast=True):
             yield copy.deepcopy(neighbor)
 
 
-def get_worst_element_idx(tour: list[int], distance_matrix: NDArray[float]) -> int:
-    """Returns the index of element y of the worst edge (x,y) in the tour."""
-    worst_fit = 0.0
-    worst_idx = None
-    for i in range(-1, len(tour) - 1):
-        fit = distance_matrix[i][i + 1]
-        if fit > worst_fit:
-            worst_fit = fit
-            worst_idx = i + 1
-    return worst_idx
-
-
 def init_monte_carlo(size: int, distance_matrix: NDArray[float]) -> list[Candidate]:
-    """Initializes the population at random."""
+    """Initializes the population at random.
+    The resulting candidates may include edges that are missing in the distance matrix.
+    """
     sample = list(range(len(distance_matrix)))
     population = []
     for i in range(size):
         rd.shuffle(sample)
-        population.append(Candidate(copy.deepcopy(sample)))
-    return population
-
-
-def init_heuristic_hybrid(size: int,
-                          distance_matrix: NDArray[float],
-                          percentage_greedy: float = 0.5) -> list[Candidate]:
-    """Initializes percentage_greedy of the population with a full greedy heuristic,
-    removing any duplicates. Then, the remaining are initialized with a greedy span
-    going from random (0.0) to fully greedy (1.0).
-    """
-    population = init_heuristic(math.ceil(percentage_greedy * size), distance_matrix, fast=True, greediness=1.0)
-    for i, x in enumerate(population):
-        if any([is_same_tour(x.tour, y.tour) for y in population[:i]]):
-            population.remove(x)
-    less_greedy = init_heuristic_span(size - len(population), distance_matrix, 0.0, 1.0)
-    print(f'There were {len(less_greedy)} less greedy candidates.')
-    population.extend(less_greedy)
-    return population
-
-
-def init_heuristic_span(size: int,
-                        distance_matrix: NDArray[float],
-                        min_greedy: float = 0.0,
-                        max_greedy: float = 1.0) -> list[Candidate]:
-    """Initializes with a heuristic and greediness increasing from min_greedy to max_greedy."""
-    population = []
-    greedy_range = np.linspace(min_greedy, max_greedy, num=size)
-    for greedy in greedy_range:
-        population.extend(init_heuristic(1, distance_matrix, fast=True, greediness=greedy))
+        candidate = Candidate(copy.deepcopy(sample))
+        candidate.recalculate_fitness(distance_matrix)
+        population.append(candidate)
     return population
 
 
 def init_heuristic(size: int, distance_matrix: NDArray[float],
-                   fast: bool = True, greediness: float = 0.5) -> list[Candidate]:
-    """Initializes the population with a heuristic."""
+                   fast: bool = True, greediness: float = 0.5,
+                   duplicates=False) -> list[Candidate]:
+    """Initializes the population with a heuristic.
+    All resulting candidates are guaranteed to not use missing edges.
+    greediness is the probability of taking the greed choice each step.
+    If duplicates is False, then no duplicate tours are allowed.
+    """
     population = []
-    for i in range(size):
+    while len(population) != size:
         candidate = Candidate(heuristic_solution(distance_matrix, fast, greediness))
+        if not duplicates and any([is_same_tour(candidate.tour, y.tour) for y in population]):
+            continue  # Duplicate so go again.
         candidate.recalculate_fitness(distance_matrix)
         population.append(candidate)
     return population
@@ -607,14 +574,17 @@ def heuristic_recursive(choices: list[int], current_result: list[int],
     return False
 
 
-def select_k_tournament(population: list[Candidate], k: int, nr_times: int = 1) -> list[Candidate]:
+def select_k_tournament(population: list[Candidate],
+                        k: int,
+                        nr_times: int = 1) -> list[Candidate]:
     """Performs nr_times k-tournaments on the population.
-    Returns the best candidate among k random samples.
+    Each tournament is the best candidate among k random samples without replacement.
     """
     selected = []
-    for _ in range(nr_times):
+    while len(selected) != nr_times:
         tournament = rd.sample(population, k)
-        selected.append(Candidate.most_fit(tournament))
+        most_fit = Candidate.most_fit(tournament)
+        selected.append(most_fit)
     return selected
 
 
@@ -630,8 +600,7 @@ def elim_lambda_plus_mu(population: list[Candidate],
 def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
                                         offspring: list[Candidate],
                                         alpha: float,
-                                        sigma: float,
-                                        elitism: int = 0) -> list[Candidate]:
+                                        sigma: float) -> list[Candidate]:
     """Performs (lambda+mu)-elimination with fitness sharing for diversity promotion.
     The sign(f(x)) is always 1 for the Traveling Salesman Problem,
     so the implementation does not explicitly calculate this.
@@ -647,15 +616,12 @@ def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
         x.original_fitness = x.fitness
     new_population = []
 
-    elites = old_population[:elitism]
-
     while len(new_population) != lamda:
         choice = old_population.pop(0)
         neighbors = []
         for neighbor in choice.sigma_neighborhood(old_population, sigma):
-            if neighbor not in elites and neighbor.fitness != math.inf:
-                # Only apply a penalty if this neighbor is not an elite
-                # and if its fitness isn't already infinite.
+            if neighbor.fitness != math.inf:
+                # Only apply a penalty if its fitness isn't already infinite.
                 penalty_term = math.pow((1 - (choice.distance(neighbor) / sigma)), alpha)
                 neighbor.fitness += neighbor.original_fitness * penalty_term
             neighbors.append(neighbor)
@@ -690,19 +656,8 @@ def insert_sorted(lst: list[Candidate], x: Candidate, key) -> list[Candidate]:
     return lst
 
 
-def elim_lambda_comma_mu(population: list[Candidate],
-                         offspring: list[Candidate]) -> list[Candidate]:
-    """Performs (lambda,mu)-elimination. Returns the new population."""
-    lamda = len(population)
-    mu = len(offspring)
-    assert lamda <= mu, \
-        f'(lambda,mu)-elimination requires lambda <= mu, got: {lamda} > {mu}'
-    Candidate.sort(offspring)
-    return offspring[:lamda]
-
-
 def is_same_tour(tour1: list[int], tour2: list[int]) -> bool:
-    """Returns True if tour1 is the same tour as tour2, false otherwise.
+    """Returns True if tour1 is the same tour as tour2, False otherwise.
     (They could be shifted copies.)
     """
     start = tour2.index(tour1[0])
@@ -722,10 +677,12 @@ def is_complete_tour(tour: list[int]) -> bool:
 
 
 def assert_complete_tour(tour: list[int]):
+    """Assert that tour is complete."""
     assert is_complete_tour(tour), f'Got incomplete tour: {tour}'
 
 
 def assert_complete_tours(candidates: list[Candidate]):
+    """Assert that all candidates have complete tours."""
     for x in candidates:
         assert_complete_tour(x.tour)
 
@@ -742,31 +699,23 @@ class r0758170:
         file.close()
 
         # Parameters
-        k = 5
+        k = 3
         lamda = 40
         mu = math.ceil(1.5 * lamda)
-        greedy_percentage = 0.10
-        alpha_max = 3.0
-        alpha_min = 0.5
-        alpha = alpha_max
-        sigma_max = math.ceil(0.30 * len(distance_matrix))
-        sigma_min = math.ceil(0.10 * len(distance_matrix))
-        sigma = sigma_max
-        power = 2.5
+        greedy_percentage = 0.20
+        alpha = 0.5
+        sigma = 15
         mutation_prob = 0.05
         lso_prob = 0.01
 
         # Check that parameters are valid
-        assert 0 < k <= lamda, f'k must be positive and leq to lambda, got: {k}'
+        assert k > 1, f'k must be greater than 1, got: {k}'
         assert 0.0 <= mutation_prob <= 1.0, f'Mutation_prob should be a probability, got: {mutation_prob}'
         assert 0.0 <= lso_prob <= 1.0, f'Lso_prob should be a probability, got: {lso_prob}'
         assert lamda > 0, f'Lambda must be positive, got: {lamda}'
         assert mu % 2 == 0, f'Mu must be even, got: {mu}'
-        assert (alpha_max >= 0.0 and alpha_min >= 0.0 and alpha >= 0.0), \
-            f'Alpha should be non-negative, got: {alpha}'
-        assert (sigma_max > 0.0 and sigma_min > 0.0 and sigma > 0.0), \
-            f'Sigma must be positive, got: {sigma}'
-        assert power > 0.0, f'Power must be positive, got: {power}'
+        assert alpha >= 0, f'Alpha should be non-negative, got: {alpha}'
+        assert sigma > 0.0, f'Sigma must be positive, got: {sigma}'
 
         # Initialization
         nr_very_greedy = math.ceil(greedy_percentage * lamda)
@@ -774,16 +723,11 @@ class r0758170:
         print(f'Initializing with {nr_very_greedy} very greedy and {nr_more_random} more random.')
         print('This may take a while...')
         very_greedy = init_heuristic(nr_very_greedy, distance_matrix, fast=True, greediness=1.0)
-        more_random = init_heuristic_span(nr_more_random, distance_matrix, 0.0, 0.95)
-        # more_random = init_heuristic(nr_more_random, distance_matrix, fast=True, greediness=0.0)
+        more_random = init_heuristic(nr_more_random, distance_matrix, fast=True, greediness=0.0)
         population = very_greedy + more_random
         Candidate.sort(population)
         print('Finished initializing.')
 
-        distances = open('distances.csv', 'w')
-        distances.write('time,min,average,max\n')
-
-        time_left = 300.0
         current_it = 1
         max_it = -1  # Set to -1 for no limit.
         while current_it != max_it + 1:
@@ -815,14 +759,8 @@ class r0758170:
             # Elimination
             population = elim_lambda_plus_mu_fitness_sharing(population, offspring, alpha, sigma)
 
-            # Update alpha and sigma
-            factor = (math.pow((time_left / 300.0), power))
-            sigma = round(sigma_min + (sigma_max - sigma_min) * factor)
-            alpha = alpha_min + (alpha_max - alpha_min) * factor
-
             # Recalculate statistics
             mean_objective, best_solution = Candidate.stats(population, include_inf=False)
-            min_dist, avg_dist, max_dist = Candidate.distance_stats(population)
 
             # Call the reporter with:
             #  - the mean objective function value of the population
@@ -832,22 +770,14 @@ class r0758170:
             time_left = self.reporter.report(mean_objective, best_solution.fitness,
                                              np.array(best_solution.tour, dtype=int))
 
-            distances.write(f'{300.0 - time_left},{min_dist},{avg_dist},{max_dist}\n')
-
             print(f'{time_left:5.1f} sec | '
                   f'{current_it:6} | '
                   f'mean: {mean_objective:10.2f} | '
-                  f'best: {best_solution.fitness:10.2f} | '
-                  f'min dist: {min_dist:8.2f} | '
-                  f'avg dist: {avg_dist:8.2f} | '
-                  f'max dist: {max_dist:8.2f} | '
-                  f'sigma: {sigma:6.2f} | '
-                  f'alpha: {alpha:4.2f}'
+                  f'best: {best_solution.fitness:10.2f}'
                   )
 
             current_it += 1
             if time_left < 0:
                 break
         print('Done.')
-        distances.close()
         return 0

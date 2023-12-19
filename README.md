@@ -100,3 +100,5 @@
 - I need to maintain diversity in the initialization. So far, I assumed that doing a greedy init (1.0) for all
   candidates, that this is not maintained. However, for tour1000 I am seeing that there are *no* duplicates! And the
   avg. (~350) and max. (~550) dist. seems to also imply that it actually *is* kind of diverse...
+- PMX seems to work fine up until about tour 750, and for tour1000 it seems downright worse than order. (The mean
+  _increases_ somehow for tour1000...) -> Confirmed! PXM only _increases_ for tour1000, but order only is fine!
