@@ -2,7 +2,9 @@
 #
 # For the course: Genetic algorithms and evolutionary computing
 #
-# William Dumez (r0758170)
+# Author: William Dumez (r0758170)
+# 2023-12-31
+
 
 from __future__ import annotations
 import functools
@@ -94,7 +96,7 @@ class Candidate:
 
     def mutate(self) -> None:
         """Mutate self in-place."""
-        move_func = rd.choice(self.mutate_options)
+        move_func = rd.choice(self.mutate_options)  # Uniform choice.
         self.tour = mutate(self.tour, move_func)
 
     def recombine(self, other: Candidate) -> list[Candidate]:
@@ -340,7 +342,7 @@ def remove_references(edge_table: dict[int, list[tuple[int, bool]]], value: int)
         if x == value:
             continue  # We can skip this case because value cannot be adjacent to itself.
         for y, is_common in lst:
-            if value == y:
+            if y == value:
                 lst.remove((y, is_common))
                 break
 
@@ -459,7 +461,7 @@ def lso_neighborhood(candidate: Candidate, move_func, fast=True):
     """Generator which generates all candidates within
     1-distance of candidate, according to a movement function.
     The neighbor's fitness has not been calculated yet.
-    If fast is True, then only consider log(len(candidate) random neighbors.
+    If fast is True, then only consider log(len(candidate)) random neighbors.
     """
     neighbor = copy.deepcopy(candidate)
     size = len(candidate)
@@ -499,7 +501,7 @@ def init_heuristic(size: int, distance_matrix: NDArray[float],
                    duplicates=False) -> list[Candidate]:
     """Initializes the population with a heuristic.
     All resulting candidates are guaranteed to not use missing edges.
-    greediness is the probability of taking the greed choice each step.
+    greediness is the probability of taking the greedy choice each step.
     If duplicates is False, then no duplicate tours are allowed.
     """
     population = []
@@ -612,11 +614,11 @@ def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
     so the implementation does not explicitly calculate this.
     This implementation has been optimized to update incrementally.
     The fitness values of candidates are only changed temporarily.
-    The elitism best candidates do not get penalized.
     """
     lamda = len(population)
     old_population = population + offspring
     Candidate.sort(old_population)
+
     # We must remember the original fitness.
     for x in old_population:
         x.original_fitness = x.fitness
@@ -637,6 +639,7 @@ def elim_lambda_plus_mu_fitness_sharing(population: list[Candidate],
         for neighbor in neighbors:
             old_population = insert_sorted(old_population, neighbor, key=lambda y: y.fitness)
         new_population.append(choice)
+
     # Now restore the original fitness.
     for x in new_population:
         x.fitness = x.original_fitness
@@ -716,21 +719,22 @@ class r0758170:
 
         # Check that parameters are valid
         assert k > 1, f'k must be greater than 1, got: {k}'
-        assert 0.0 <= mutation_prob <= 1.0, f'Mutation_prob should be a probability, got: {mutation_prob}'
-        assert 0.0 <= lso_prob <= 1.0, f'Lso_prob should be a probability, got: {lso_prob}'
         assert lamda > 0, f'Lambda must be positive, got: {lamda}'
         assert mu % 2 == 0, f'Mu must be even, got: {mu}'
+        assert 0.0 <= greedy_percentage <= 1.0, f'Greedy_percentage should be a percentage, got: {greedy_percentage}'
         assert alpha >= 0, f'Alpha should be non-negative, got: {alpha}'
         assert sigma > 0.0, f'Sigma must be positive, got: {sigma}'
+        assert 0.0 <= mutation_prob <= 1.0, f'Mutation_prob should be a probability, got: {mutation_prob}'
+        assert 0.0 <= lso_prob <= 1.0, f'Lso_prob should be a probability, got: {lso_prob}'
 
         # Initialization
-        nr_very_greedy = math.ceil(greedy_percentage * lamda)
-        nr_more_random = lamda - nr_very_greedy
-        print(f'Initializing with {nr_very_greedy} very greedy and {nr_more_random} more random.')
+        nr_greedy = round(greedy_percentage * lamda)
+        nr_random = lamda - nr_greedy
+        print(f'Initializing with {nr_greedy} greedy and {nr_random} random.')
         print('This may take a while...')
-        very_greedy = init_heuristic(nr_very_greedy, distance_matrix, fast=True, greediness=1.0)
-        more_random = init_heuristic(nr_more_random, distance_matrix, fast=True, greediness=0.0)
-        population = very_greedy + more_random
+        greedy = init_heuristic(nr_greedy, distance_matrix, fast=True, greediness=1.0)
+        random = init_heuristic(nr_random, distance_matrix, fast=True, greediness=0.0)
+        population = greedy + random
         Candidate.sort(population)
         print('Finished initializing.')
 
