@@ -29,6 +29,7 @@ def main():
     g.set_title(f'{problem} Histogram ({nr_benchmarks} benchmarks)')
     g.set_xlabel('Fitness')
     plt.show()
+    plt.savefig('histogram.png')
 
 
 if __name__ == '__main__':
