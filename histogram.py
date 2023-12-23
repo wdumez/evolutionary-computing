@@ -28,7 +28,7 @@ def main():
     g = sns.histplot(df, element='step', binwidth=100)
     g.set_title(f'{problem} Histogram ({nr_benchmarks} benchmarks)')
     g.set_xlabel('Fitness')
-    plt.show()
+    # plt.show()
     plt.savefig('histogram.png')
 
 

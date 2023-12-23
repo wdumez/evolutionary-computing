@@ -5,19 +5,19 @@ import histogram
 
 
 def main():
-    problem = 'tour1000'
+    problem = 'tour50'
     start = 1
-    nr_benchmarks = 20
-    best_fit = math.inf
-    best_nr = 1
+    nr_benchmarks = 100
+    mean_fits = []
+    best_fits = []
     for nr in range(start, nr_benchmarks + start):
         filename = f'./benchmark/benchmark_{problem}_{nr:03}.csv'
-        fit, _ = histogram.get_fitness(filename)
-        print(f'{nr} has fitness: {fit}')
-        if fit < best_fit:
-            best_fit = fit
-            best_nr = nr
-    print(f'{best_nr} was the best benchmark, with fitness: {best_fit}')
+        best, mean = histogram.get_fitness(filename)
+        best_fits.append(best)
+        mean_fits.append(mean)
+    data = {'best': best_fits, 'mean': mean_fits}
+    df = pd.DataFrame(data)
+    print(df.describe())
 
 
 if __name__ == '__main__':
