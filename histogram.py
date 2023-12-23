@@ -21,11 +21,11 @@ def create_df(nr_benchmarks, problem) -> pd.DataFrame:
 
 
 def main():
-    problem = 'tour500'
-    nr_benchmarks = 17
+    problem = 'tour50'
+    nr_benchmarks = 100
     df = create_df(nr_benchmarks, problem)
     # df = df.melt()
-    g = sns.histplot(df, element='step')
+    g = sns.histplot(df, element='step', binwidth=100)
     g.set_title(f'{problem} Histogram ({nr_benchmarks} benchmarks)')
     g.set_xlabel('Fitness')
     plt.show()

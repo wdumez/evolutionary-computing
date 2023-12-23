@@ -1,3 +1,9 @@
+# r0758170.py
+#
+# For the course: Genetic algorithms and evolutionary computing
+#
+# William Dumez (r0758170)
+
 from __future__ import annotations
 import functools
 import copy

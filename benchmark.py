@@ -4,8 +4,8 @@ import r0758170
 import matplotlib.pyplot as plt
 import visualize
 
-start_nr = 1
-nr_benchmarks = 20
+start_nr = 51
+nr_benchmarks = 50
 
 for benchmark_nr in range(start_nr, start_nr + nr_benchmarks):
     problem = 'tour50'
