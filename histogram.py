@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from visualize import preprocess
+from visualize import preprocess, get_heuristic
 
 
 def get_fitness(filename: str) -> tuple[float, float]:
@@ -21,13 +21,16 @@ def create_df(nr_benchmarks, problem) -> pd.DataFrame:
 
 
 def main():
-    problem = 'tour50'
+    problem_size = 50
+    problem = f'tour{problem_size}'
+    heuristic = get_heuristic(problem_size)
     nr_benchmarks = 100
     df = create_df(nr_benchmarks, problem)
     # df = df.melt()
     g = sns.histplot(df, element='step', binwidth=100)
     g.set_title(f'{problem} Histogram ({nr_benchmarks} benchmarks)')
     g.set_xlabel('Fitness')
+    g.axvline(x=heuristic, color='green')
     # plt.show()
     plt.savefig('histogram.png')
 
