@@ -7,10 +7,12 @@
 
 
 from __future__ import annotations
-import functools
+
 import copy
+import functools
 import random as rd
 import sys
+
 import math
 import numpy as np
 from numpy.typing import NDArray
@@ -72,7 +74,7 @@ class Candidate:
     def __init__(self, tour: list[int]):
         self.tour = tour
         self.fitness = 0.0
-        self.original_fitness = self.fitness
+        self.original_fitness = self.fitness  # Used in fitness sharing
         self.mutate_options = [swap, insert, inversion, scramble]
         self.recombine_func = recombine_order_crossover
         self.lso_options = [swap, insert]
@@ -96,7 +98,7 @@ class Candidate:
 
     def mutate(self) -> None:
         """Mutate self in-place."""
-        move_func = rd.choice(self.mutate_options)  # Uniform choice.
+        move_func = rd.choice(self.mutate_options)  # Uniform random choice.
         self.tour = mutate(self.tour, move_func)
 
     def recombine(self, other: Candidate) -> list[Candidate]:
@@ -115,7 +117,7 @@ class Candidate:
         local_search(self, distance_matrix, 1, move_func, fast)
 
     def recalculate_fitness(self, distance_matrix: NDArray[float]) -> None:
-        """Recalculate the fitness."""
+        """Recalculate and update the fitness."""
         self.fitness = self.fitness_func(self.tour, distance_matrix)
 
     def distance(self, to: Candidate) -> float:
@@ -138,6 +140,7 @@ def align(tour: list[int], first_pos: int, second_pos: int) -> tuple[list[int], 
     where [first_pos:second_pos) is a range of indices in tour.
     Also returns the new second_pos.
     The new first_pos is 0, and so is not returned.
+
     Examples:
         input: tour = [0,1,2,3,4,5,6,7,8,9], first_pos = 3, second_pos = 8
         output: ([3,4,5,6,7,8,9,0,1,2], 5)
@@ -208,7 +211,7 @@ def path_length(tour: list[int], distance_matrix: NDArray[float]) -> float:
 
 def distance_edges(tour1: list[int], tour2: list[int]) -> float:
     """Return the distance between two tours.
-    The distance is the nr. of edges that are different.
+    The distance is the number of edges that are different.
     """
     edges1 = get_edges(tour1)
     edges2 = get_edges(tour2)
@@ -428,8 +431,9 @@ def local_search(candidate: Candidate,
                  depth: int,
                  move_func,
                  fast=True) -> None:
-    """Perform a local search on a candidate. It gets updated in-place if a better fitness was found.
-    The search is not exhaustive and only considers log(len(distance_matrix)) candidates, for performance reasons.
+    """Perform a local search on candidate. It gets updated in-place if a better fitness was found.
+    If fast is True, then the search is not exhaustive and only considers log(len(distance_matrix)) candidates,
+    for performance reasons.
     Move_func determines the neighborhood structure (accepts: swap, insert, scramble, inversion).
     """
     best_candidate = copy.deepcopy(candidate)
@@ -497,8 +501,8 @@ def init_monte_carlo(size: int, distance_matrix: NDArray[float]) -> list[Candida
 
 
 def init_heuristic(size: int, distance_matrix: NDArray[float],
-                   fast: bool = True, greediness: float = 0.5,
-                   duplicates=False) -> list[Candidate]:
+                   fast: bool = True, greediness: float = 0.0,
+                   duplicates: bool = False) -> list[Candidate]:
     """Initializes the population with a heuristic.
     All resulting candidates are guaranteed to not use missing edges.
     greediness is the probability of taking the greedy choice each step.
@@ -508,13 +512,13 @@ def init_heuristic(size: int, distance_matrix: NDArray[float],
     while len(population) != size:
         candidate = Candidate(heuristic_solution(distance_matrix, fast, greediness))
         if not duplicates and any([is_same_tour(candidate.tour, y.tour) for y in population]):
-            continue  # Duplicate so go again.
+            continue  # This was a duplicate so try again.
         candidate.recalculate_fitness(distance_matrix)
         population.append(candidate)
     return population
 
 
-def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greediness: float = 0.5) -> list[int]:
+def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greediness: float = 0.0) -> list[int]:
     """Uses a greedy heuristic to find a solution.
     If fast is True, then only one random starting position is tried; otherwise all starting positions
     in a random permutation are tried.
@@ -543,6 +547,7 @@ def heuristic_solution(distance_matrix: NDArray[float], fast: bool = True, greed
     results.sort(key=lambda x: path_length(x, distance_matrix))
     candidate = results[0]
 
+    # Now restore the recursion limit.
     sys.setrecursionlimit(recursion_limit)
     return candidate
 
@@ -589,7 +594,7 @@ def select_k_tournament(population: list[Candidate],
     Each tournament is the best candidate among k random samples without replacement.
     """
     selected = []
-    while len(selected) != nr_times:
+    for _ in range(nr_times):
         tournament = rd.sample(population, k)
         most_fit = Candidate.most_fit(tournament)
         selected.append(most_fit)
@@ -710,14 +715,14 @@ class r0758170:
         # Parameters
         k = 3
         lamda = 40
-        mu = math.ceil(1.5 * lamda)
+        mu = 60
         greedy_percentage = 0.20
         alpha = 0.5
         sigma = 15
         mutation_prob = 0.05
         lso_prob = 0.01
 
-        # Check that parameters are valid
+        # Check that parameters are valid.
         assert k > 1, f'k must be greater than 1, got: {k}'
         assert lamda > 0, f'Lambda must be positive, got: {lamda}'
         assert mu % 2 == 0, f'Mu must be even, got: {mu}'
